@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-**Nexus** is a lightweight, cross-OS database administrator — a native replacement for the discontinued Azure Data Studio. C# / .NET 10 + Avalonia UI 12 (MVVM via CommunityToolkit.Mvvm), dark IDE-style UI. Supports 10 engines: PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, DuckDB, ClickHouse (SQL) plus MongoDB (mongosh-style queries) and Redis (raw commands + `INSPECT <key>` pseudo-command). Extensions are permanently out of scope — the product stays lightweight.
+**Nexus** is a lightweight, cross-OS database administrator. C# / .NET 10 + Avalonia UI 12 (MVVM via CommunityToolkit.Mvvm), dark IDE-style UI. Supports 10 engines: PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, DuckDB, ClickHouse (SQL) plus MongoDB (mongosh-style queries) and Redis (raw commands + `INSPECT <key>` pseudo-command). Extensions are permanently out of scope — the product stays lightweight.
 
 ## Commands
 

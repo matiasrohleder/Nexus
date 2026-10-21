@@ -1,8 +1,7 @@
 # Nexus
 
-A **lightweight, cross-OS database administrator** — a native replacement for the discontinued
-Azure Data Studio. Built with **C# / .NET 10 + Avalonia UI** (native desktop on Linux, Windows
-and macOS — not a browser shell).
+A **lightweight, cross-OS database administrator**. Built with **C# / .NET 10 + Avalonia UI**
+(native desktop on Linux, Windows and macOS — not a browser shell).
 
 ![Nexus](docs/nexus-screenshot.png)
 
