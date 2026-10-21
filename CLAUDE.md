@@ -4,12 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-**Nexus** (`Nexus/`) is a lightweight, cross-OS database administrator — a native replacement for the discontinued Azure Data Studio. C# / .NET 10 + Avalonia UI 12 (MVVM via CommunityToolkit.Mvvm), dark IDE-style UI. Supports 10 engines: PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, DuckDB, ClickHouse (SQL) plus MongoDB (mongosh-style queries) and Redis (raw commands + `INSPECT <key>` pseudo-command). Extensions are permanently out of scope — the product stays lightweight.
+**Nexus** is a lightweight, cross-OS database administrator — a native replacement for the discontinued Azure Data Studio. C# / .NET 10 + Avalonia UI 12 (MVVM via CommunityToolkit.Mvvm), dark IDE-style UI. Supports 10 engines: PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite, DuckDB, ClickHouse (SQL) plus MongoDB (mongosh-style queries) and Redis (raw commands + `INSPECT <key>` pseudo-command). Extensions are permanently out of scope — the product stays lightweight.
 
 ## Commands
 
 ```bash
-cd Nexus
 dotnet build -c Debug                 # build
 dotnet run -c Debug                   # run the GUI
 dotnet publish -c Release -o dist     # publish (framework-dependent); binary at dist/Nexus
@@ -124,7 +123,7 @@ and inject into the VM.
 ## Versioning
 
 Semantic versioning starting at **0.1.0**. The single source of truth is `<Version>` in
-`Nexus/Nexus.csproj`; `Services/AppInfo.cs` reads it from the assembly at runtime and the top bar
+`Nexus.csproj`; `Services/AppInfo.cs` reads it from the assembly at runtime and the top bar
 renders it as "Nexus — {version}" (`MainWindowViewModel.VersionText`). To release: bump
 `<Version>`, republish. Don't hardcode the version anywhere else.
 

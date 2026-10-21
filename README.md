@@ -60,7 +60,6 @@ transactions with rollback.
 Requires the .NET 10 SDK.
 
 ```bash
-cd Nexus
 ./dist/Nexus            # published binary
 # or: dotnet run -c Release
 # or: ./run.sh
