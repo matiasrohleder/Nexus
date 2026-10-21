@@ -1,0 +1,109 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Nexus.ViewModels"
+             x:Class="Nexus.Views.ServerAdminView"
+             x:DataType="vm:ServerAdminViewModel">
+
+    <Grid RowDefinitions="Auto,*,Auto">
+        <Border Grid.Row="0" Background="#252526" Padding="8 6" BorderBrush="#3F3F46" BorderThickness="0 0 0 1">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Text="🖥 SERVER ADMINISTRATION" FontSize="11" FontWeight="Bold"
+                           Opacity="0.7" VerticalAlignment="Center" />
+                <Button Content="⟳ Refresh" Classes="toolbar" Command="{Binding RefreshCommand}" />
+                <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsBusy}" Width="80" Height="3"
+                             VerticalAlignment="Center" />
+            </StackPanel>
+        </Border>
+
+        <TabControl Grid.Row="1" Background="#1E1E1E">
+            <TabItem Header="Sessions" IsVisible="{Binding SupportsSessions}">
+                <Grid RowDefinitions="Auto,*">
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8" Margin="6">
+                        <Button Content="⛔ Kill Session" Classes="toolbar" Command="{Binding KillSessionCommand}"
+                                IsVisible="{Binding SupportsKill}" />
+                    </StackPanel>
+                    <DataGrid Grid.Row="1" ItemsSource="{Binding Sessions}"
+                              SelectedItem="{Binding SelectedSession}"
+                              AutoGenerateColumns="False" IsReadOnly="True" FontSize="12"
+                              GridLinesVisibility="Horizontal">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Id" Binding="{Binding Id}" Width="Auto" />
+                            <DataGridTextColumn Header="User" Binding="{Binding User}" Width="Auto" />
+                            <DataGridTextColumn Header="Database" Binding="{Binding Database}" Width="Auto" />
+                            <DataGridTextColumn Header="State" Binding="{Binding State}" Width="Auto" />
+                            <DataGridTextColumn Header="Duration (ms)" Binding="{Binding DurationMs}" Width="Auto" />
+                            <DataGridTextColumn Header="Query" Binding="{Binding Query}" Width="*" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Users" IsVisible="{Binding SupportsUsers}">
+                <DataGrid ItemsSource="{Binding Users}" AutoGenerateColumns="False" IsReadOnly="True"
+                          FontSize="12" GridLinesVisibility="Horizontal" Margin="6">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="Auto" />
+                        <DataGridCheckBoxColumn Header="Admin" Binding="{Binding IsAdmin}" Width="Auto" />
+                        <DataGridTextColumn Header="Details" Binding="{Binding Details}" Width="*" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="Table Sizes">
+                <Grid RowDefinitions="Auto,*">
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8" Margin="6">
+                        <TextBlock Text="Container:" VerticalAlignment="Center" Opacity="0.7" />
+                        <ComboBox MinWidth="160" ItemsSource="{Binding Containers}"
+                                  SelectedItem="{Binding SelectedContainer}" />
+                    </StackPanel>
+                    <DataGrid Grid.Row="1" ItemsSource="{Binding TableStats}" AutoGenerateColumns="False"
+                              IsReadOnly="True" FontSize="12" GridLinesVisibility="Horizontal">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Table" Binding="{Binding Name}" Width="*" />
+                            <DataGridTextColumn Header="Rows (est.)" Binding="{Binding RowEstimate}" Width="Auto" />
+                            <DataGridTextColumn Header="Size" Binding="{Binding TotalSize}" Width="Auto" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Backup">
+                <Grid RowDefinitions="Auto,Auto,Auto,*" Margin="10">
+                    <TextBlock Grid.Row="0" Text="{Binding BackupHint}" TextWrapping="Wrap"
+                               Opacity="0.75" Margin="0 0 0 10" />
+                    <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto" IsEnabled="{Binding BackupAvailable}">
+                        <TextBox Grid.Column="0" Text="{Binding BackupDestination}"
+                                 Watermark="/path/to/backup destination" />
+                        <Button Grid.Column="1" Content="Browse…" Classes="toolbar" Margin="6 0 0 0"
+                                Command="{Binding BrowseBackupCommand}" />
+                        <Button Grid.Column="2" Content="▶ Run Backup" Classes="toolbar accent" Margin="6 0 0 0"
+                                Command="{Binding RunBackupCommand}" IsEnabled="{Binding !BackupRunning}" />
+                    </Grid>
+                    <ProgressBar Grid.Row="2" IsIndeterminate="True" IsVisible="{Binding BackupRunning}"
+                                 Height="3" Margin="0 8 0 0" />
+                    <TextBox Grid.Row="3" Text="{Binding BackupLog}" IsReadOnly="True" AcceptsReturn="True"
+                             FontFamily="Cascadia Code,Consolas,monospace" FontSize="12"
+                             Background="#1E1E1E" BorderThickness="0" Margin="0 8 0 0" />
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Variables">
+                <Grid RowDefinitions="Auto,*">
+                    <TextBox Grid.Row="0" Margin="6" Watermark="Filter variables…"
+                             Text="{Binding VariableFilter}" />
+                    <DataGrid Grid.Row="1" ItemsSource="{Binding Variables}" AutoGenerateColumns="False"
+                              IsReadOnly="True" FontSize="12" GridLinesVisibility="Horizontal">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="Auto" />
+                            <DataGridTextColumn Header="Value" Binding="{Binding Value}" Width="*" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </TabItem>
+        </TabControl>
+
+        <Border Grid.Row="2" Background="#252526" Padding="10 5" BorderBrush="#3F3F46" BorderThickness="0 1 0 0">
+            <TextBlock Text="{Binding StatusText}" Opacity="0.85" FontSize="12" />
+        </Border>
+    </Grid>
+</UserControl>

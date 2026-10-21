@@ -1,0 +1,112 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Nexus.ViewModels"
+             xmlns:ae="using:AvaloniaEdit"
+             x:Class="Nexus.Views.QueryDocumentView"
+             x:DataType="vm:QueryDocumentViewModel">
+
+    <Grid RowDefinitions="Auto,2*,Auto,Auto,3*">
+
+        <!-- Toolbar -->
+        <Border Grid.Row="0" Background="#252526" Padding="8 6" BorderBrush="#3F3F46" BorderThickness="0 0 0 1">
+            <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,*,Auto">
+                <Button Grid.Column="0" Content="▶  Run  (F5)" Classes="toolbar accent"
+                        Command="{Binding RunCommand}" IsEnabled="{Binding !IsRunning}" />
+                <Button Grid.Column="1" Content="■ Stop" Classes="toolbar" Margin="6 0 0 0"
+                        Command="{Binding StopCommand}" IsVisible="{Binding IsRunning}" />
+                <Button Grid.Column="2" Content="⚡ Explain" Classes="toolbar" Margin="6 0 0 0"
+                        Command="{Binding ExplainCommand}" IsVisible="{Binding SupportsExplain}"
+                        IsEnabled="{Binding !IsRunning}" />
+                <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4" Margin="6 0 0 0">
+                    <Button Content="📂" Classes="toolbar" ToolTip.Tip="Open .sql file (Ctrl+O)"
+                            Command="{Binding OpenFileCommand}" />
+                    <Button Content="💾" Classes="toolbar" ToolTip.Tip="Save .sql file (Ctrl+S)"
+                            Command="{Binding SaveFileCommand}" />
+                    <Button Content="★" Classes="toolbar" ToolTip.Tip="Save as snippet"
+                            Command="{Binding SaveSnippetCommand}" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="6" Margin="12 0 0 0"
+                            VerticalAlignment="Center">
+                    <TextBlock Text="Connection:" VerticalAlignment="Center" Opacity="0.7" />
+                    <ComboBox MinWidth="160" x:CompileBindings="False"
+                              ItemsSource="{Binding DataContext.Connections, RelativeSource={RelativeSource AncestorType=Window}}"
+                              SelectedItem="{Binding Connection}" />
+                    <TextBlock Text="DB:" VerticalAlignment="Center" Opacity="0.7"
+                               IsVisible="{Binding HasDatabases}" />
+                    <ComboBox MinWidth="120"
+                              ItemsSource="{Binding Databases}"
+                              SelectedItem="{Binding SelectedDatabase}"
+                              IsVisible="{Binding HasDatabases}" />
+                </StackPanel>
+
+                <TextBlock Grid.Column="6" Text="{Binding StatusText}" VerticalAlignment="Center"
+                           Opacity="0.85" Margin="0 0 4 0" />
+            </Grid>
+        </Border>
+
+        <!-- SQL editor -->
+        <ae:TextEditor Grid.Row="1" Name="Editor"
+                       ShowLineNumbers="True"
+                       FontFamily="Cascadia Code,Consolas,Menlo,monospace"
+                       FontSize="14"
+                       Background="#1E1E1E"
+                       HorizontalScrollBarVisibility="Auto"
+                       VerticalScrollBarVisibility="Auto" />
+
+        <GridSplitter Grid.Row="2" Height="4" HorizontalAlignment="Stretch" Background="#3F3F46" />
+
+        <!-- Error banner (shown above the results whenever the last run failed) -->
+        <Border Grid.Row="3" IsVisible="{Binding HasError}"
+                Background="#3A1D1D" BorderBrush="#F48771" BorderThickness="1" CornerRadius="4"
+                Margin="6 6 6 0" Padding="10 8">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <TextBlock Grid.Column="0" Text="⛔" FontSize="15" Foreground="#F48771"
+                           VerticalAlignment="Top" Margin="0 0 8 0" />
+                <ScrollViewer Grid.Column="1" MaxHeight="140" VerticalScrollBarVisibility="Auto">
+                    <SelectableTextBlock Text="{Binding ErrorText}" TextWrapping="Wrap"
+                                         Foreground="#F48771"
+                                         FontFamily="Cascadia Code,Consolas,monospace" FontSize="13" />
+                </ScrollViewer>
+                <Button Grid.Column="2" Name="CopyErrorButton" Content="Copy" Classes="toolbar" FontSize="12"
+                        VerticalAlignment="Top" Margin="8 0 0 0" />
+            </Grid>
+        </Border>
+
+        <!-- Results / Messages -->
+        <TabControl Grid.Row="4" Background="#1E1E1E">
+            <TabItem Header="Results">
+                <Grid RowDefinitions="Auto,*">
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="6" Margin="6">
+                        <ComboBox MinWidth="140"
+                                  IsVisible="{Binding HasMultipleResults}"
+                                  ItemsSource="{Binding Results}"
+                                  SelectedItem="{Binding SelectedResult}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Message}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <Button Content="⬇ CSV" Classes="toolbar" FontSize="12"
+                                Command="{Binding ExportCsvCommand}" ToolTip.Tip="Export results to CSV" />
+                        <Button Content="⬇ JSON" Classes="toolbar" FontSize="12"
+                                Command="{Binding ExportJsonCommand}" ToolTip.Tip="Export results to JSON" />
+                    </StackPanel>
+                    <DataGrid Grid.Row="1" Name="ResultsGrid"
+                              AutoGenerateColumns="False" IsReadOnly="True"
+                              CanUserResizeColumns="True" CanUserSortColumns="False"
+                              GridLinesVisibility="All"
+                              FontFamily="Cascadia Code,Consolas,monospace"
+                              FontSize="13" />
+                </Grid>
+            </TabItem>
+            <TabItem Header="Messages">
+                <TextBox Text="{Binding MessagesText}" IsReadOnly="True"
+                         AcceptsReturn="True" TextWrapping="Wrap"
+                         FontFamily="Cascadia Code,Consolas,monospace"
+                         Background="#1E1E1E" BorderThickness="0" />
+            </TabItem>
+        </TabControl>
+    </Grid>
+</UserControl>

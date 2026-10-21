@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Nexus
+Comment=PostgreSQL Studio
+Exec=/home/mrohleder/Documents/RollyCodes/DatabaseStudio/Nexus/dist/Nexus
+Icon=/home/mrohleder/Documents/RollyCodes/DatabaseStudio/Nexus/Assets/avalonia-logo.ico
+Terminal=false
+Categories=Development;Database;

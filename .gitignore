@@ -1,0 +1,17 @@
+# Build output
+bin/
+obj/
+dist/
+publish/
+*.user
+*.suo
+.vs/
+.vscode/
+.idea/
+
+# Local Claude Code settings
+.claude/settings.local.json
+
+# OS
+.DS_Store
+Thumbs.db
