@@ -22,7 +22,8 @@ public sealed partial class MongoProvider : IDatabaseProvider
 {
     public string Id => "mongodb";
     public string DisplayName => "MongoDB";
-    public string Glyph => "🍃";
+    public string Badge => "Mg";
+    public string BrandColor => "#16A34A";
     public int DefaultPort => 27017;
     public string DefaultUsername => "";
     public string DefaultDatabase => "admin";

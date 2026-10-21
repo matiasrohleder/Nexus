@@ -2,24 +2,47 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:Nexus.ViewModels"
         xmlns:prov="using:Nexus.Providers"
+        xmlns:c="using:Nexus.Controls"
         x:Class="Nexus.Views.ConnectionEditorWindow"
         x:DataType="vm:ConnectionEditorViewModel"
-        Width="520" Height="720"
+        Width="540" Height="760" MinHeight="520"
         WindowStartupLocation="CenterOwner"
-        CanResize="False"
+        CanResize="True"
+        Icon="/Assets/nexus.ico"
         Background="#1E1E1E"
         Title="{Binding DialogTitle}">
 
-    <Grid RowDefinitions="Auto,*,Auto" Margin="20">
-        <TextBlock Grid.Row="0" Text="{Binding DialogTitle}"
-                   FontSize="18" FontWeight="SemiBold" Margin="0 0 0 12" />
+    <Window.Styles>
+        <Style Selector="TextBlock.label">
+            <Setter Property="Opacity" Value="0.75" />
+            <Setter Property="FontSize" Value="12" />
+        </Style>
+        <Style Selector="Button.swatch">
+            <Setter Property="Width" Value="26" />
+            <Setter Property="Height" Value="26" />
+            <Setter Property="CornerRadius" Value="13" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="BorderThickness" Value="2" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+        </Style>
+        <Style Selector="Button.swatch.selected">
+            <Setter Property="BorderBrush" Value="White" />
+        </Style>
+        <Style Selector="Button.swatch.selected /template/ ContentPresenter">
+            <Setter Property="BorderBrush" Value="White" />
+        </Style>
+    </Window.Styles>
 
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-            <StackPanel Spacing="12">
+    <Grid RowDefinitions="Auto,*,Auto">
+        <TextBlock Grid.Row="0" Text="{Binding DialogTitle}" Margin="22 18 22 10"
+                   FontSize="18" FontWeight="SemiBold" />
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="22 0 22 8">
+            <StackPanel Spacing="14">
 
                 <!-- Engine tiles -->
                 <StackPanel Spacing="6">
-                    <TextBlock Text="Database engine" Opacity="0.8" />
+                    <TextBlock Classes="label" Text="Database engine" />
                     <ListBox ItemsSource="{Binding Engines}"
                              SelectedItem="{Binding SelectedEngine}"
                              Background="Transparent" Padding="0">
@@ -31,16 +54,19 @@
                         <ListBox.Styles>
                             <Style Selector="ListBoxItem">
                                 <Setter Property="Padding" Value="0" />
-                                <Setter Property="Margin" Value="0 0 8 8" />
+                                <Setter Property="Margin" Value="0 0 6 6" />
                                 <Setter Property="CornerRadius" Value="6" />
+                                <Setter Property="Background" Value="#252526" />
                             </Style>
                         </ListBox.Styles>
                         <ListBox.ItemTemplate>
                             <DataTemplate x:DataType="prov:IDatabaseProvider">
-                                <StackPanel Orientation="Vertical" Width="86" Height="58" Spacing="2"
+                                <StackPanel Orientation="Vertical" Width="88" Height="62" Spacing="6"
                                             HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <TextBlock Text="{Binding Glyph}" FontSize="20" HorizontalAlignment="Center"
-                                               Margin="0 6 0 0" />
+                                    <Border Classes="badge" Background="{Binding BrandColor}" Height="22" MinWidth="28"
+                                            HorizontalAlignment="Center" Margin="0 9 0 0">
+                                        <TextBlock Text="{Binding Badge}" FontSize="11" />
+                                    </Border>
                                     <TextBlock Text="{Binding DisplayName}" FontSize="11"
                                                HorizontalAlignment="Center" TextTrimming="CharacterEllipsis" />
                                 </StackPanel>
@@ -50,11 +76,11 @@
                 </StackPanel>
 
                 <!-- Paste URL -->
-                <StackPanel Spacing="4">
-                    <TextBlock Text="Quick fill — paste a connection URL or string" Opacity="0.8" />
+                <StackPanel Spacing="5">
+                    <TextBlock Classes="label" Text="Quick fill — paste a connection URL or string" />
                     <Grid ColumnDefinitions="*,Auto">
                         <TextBox Grid.Column="0" Text="{Binding PasteUrl}"
-                                 Watermark="postgres://user:pass@host:5432/db   ·   Host=…;Port=…;Database=…" />
+                                 PlaceholderText="postgres://user:pass@host:5432/db" />
                         <Button Grid.Column="1" Content="Apply" Margin="6 0 0 0" Classes="toolbar"
                                 Command="{Binding ApplyPastedUrlCommand}" />
                     </Grid>
@@ -62,93 +88,109 @@
                                IsVisible="{Binding PasteUrlError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
                 </StackPanel>
 
-                <Separator Background="#3F3F46" Height="1" />
+                <Border Height="1" Background="#333337" Margin="0 2" />
 
-                <StackPanel Spacing="4">
-                    <TextBlock Text="Name" Opacity="0.8" />
-                    <TextBox Text="{Binding Name}" Watermark="Auto-generated if left empty" />
+                <StackPanel Spacing="5">
+                    <TextBlock Classes="label" Text="Name" />
+                    <TextBox Text="{Binding Name}" PlaceholderText="Auto-generated if left empty" />
                 </StackPanel>
 
                 <!-- File-based engines: file picker -->
-                <StackPanel Spacing="4" IsVisible="{Binding IsFileBased}">
-                    <TextBlock Text="Database file" Opacity="0.8" />
+                <StackPanel Spacing="5" IsVisible="{Binding IsFileBased}">
+                    <TextBlock Classes="label" Text="Database file" />
                     <Grid ColumnDefinitions="*,Auto">
-                        <TextBox Grid.Column="0" Text="{Binding FilePath}" Watermark="/path/to/database.db" />
+                        <TextBox Grid.Column="0" Text="{Binding FilePath}" PlaceholderText="/path/to/database.db" />
                         <Button Grid.Column="1" Content="Browse…" Margin="6 0 0 0" Classes="toolbar"
                                 Command="{Binding BrowseFileCommand}" />
                     </Grid>
                 </StackPanel>
 
                 <!-- Server-based engines -->
-                <StackPanel Spacing="12" IsVisible="{Binding IsServerBased}">
-                    <Grid ColumnDefinitions="*,90">
-                        <StackPanel Grid.Column="0" Spacing="4" Margin="0 0 8 0">
-                            <TextBlock Text="Host" Opacity="0.8" />
-                            <TextBox Text="{Binding Host}" Watermark="localhost" />
+                <StackPanel Spacing="14" IsVisible="{Binding IsServerBased}">
+                    <Grid ColumnDefinitions="*,110">
+                        <StackPanel Grid.Column="0" Spacing="5" Margin="0 0 8 0">
+                            <TextBlock Classes="label" Text="Host" />
+                            <TextBox Text="{Binding Host}" PlaceholderText="localhost" />
                         </StackPanel>
-                        <StackPanel Grid.Column="1" Spacing="4">
-                            <TextBlock Text="Port" Opacity="0.8" />
+                        <StackPanel Grid.Column="1" Spacing="5">
+                            <TextBlock Classes="label" Text="Port" />
                             <TextBox Text="{Binding Port}" />
                         </StackPanel>
                     </Grid>
 
-                    <StackPanel Spacing="4">
-                        <TextBlock Text="Database" Opacity="0.8" />
+                    <StackPanel Spacing="5">
+                        <TextBlock Classes="label" Text="Database" />
                         <TextBox Text="{Binding Database}" />
                     </StackPanel>
 
                     <Grid ColumnDefinitions="*,*">
-                        <StackPanel Grid.Column="0" Spacing="4" Margin="0 0 8 0">
-                            <TextBlock Text="Username" Opacity="0.8" />
+                        <StackPanel Grid.Column="0" Spacing="5" Margin="0 0 8 0">
+                            <TextBlock Classes="label" Text="Username" />
                             <TextBox Text="{Binding Username}" />
                         </StackPanel>
-                        <StackPanel Grid.Column="1" Spacing="4">
-                            <TextBlock Text="Password" Opacity="0.8" />
-                            <TextBox Text="{Binding Password}" PasswordChar="•" />
+                        <StackPanel Grid.Column="1" Spacing="5">
+                            <TextBlock Classes="label" Text="Password" />
+                            <TextBox Text="{Binding Password}" PasswordChar="•" Classes="revealPasswordButton" />
                         </StackPanel>
                     </Grid>
 
-                    <StackPanel Spacing="4">
-                        <TextBlock Text="SSL Mode" Opacity="0.8" />
+                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="0 -6 0 0" Opacity="0.6">
+                        <c:Icon Kind="lock" Size="13" Foreground="#4EC977" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding PasswordStorageText}" FontSize="11" TextWrapping="Wrap"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+
+                    <StackPanel Spacing="5">
+                        <TextBlock Classes="label" Text="SSL mode" />
                         <ComboBox ItemsSource="{Binding SslModes}" SelectedItem="{Binding SslMode}"
                                   HorizontalAlignment="Stretch" />
                     </StackPanel>
                 </StackPanel>
 
                 <!-- Color swatches -->
-                <StackPanel Spacing="4">
-                    <TextBlock Text="Accent color" Opacity="0.8" />
+                <StackPanel Spacing="6">
+                    <TextBlock Classes="label" Text="Accent color (marks the connection in the sidebar)" />
                     <ItemsControl ItemsSource="{Binding ColorSwatches}">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
-                                <StackPanel Orientation="Horizontal" Spacing="6" />
+                                <StackPanel Orientation="Horizontal" Spacing="8" />
                             </ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="x:String" x:CompileBindings="False">
-                                <Button Width="26" Height="26" CornerRadius="13" Padding="0"
-                                        Background="{Binding}"
-                                        Command="{Binding $parent[ItemsControl].DataContext.SelectColorCommand}"
-                                        CommandParameter="{Binding}" />
+                            <DataTemplate x:DataType="vm:ColorSwatch">
+                                <Button Classes="swatch" Classes.selected="{Binding IsSelected}"
+                                        Background="{Binding Hex}" ToolTip.Tip="{Binding Hex}"
+                                        Command="{Binding $parent[ItemsControl].((vm:ConnectionEditorViewModel)DataContext).SelectColorCommand}"
+                                        CommandParameter="{Binding Hex}" />
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
                 </StackPanel>
 
                 <!-- Test result -->
-                <Border Padding="10" CornerRadius="4" Background="#252526"
+                <Border Padding="12 10" CornerRadius="6" Background="#252526" BorderBrush="#3F3F46" BorderThickness="1"
                         IsVisible="{Binding HasTestMessage}">
-                    <TextBlock Text="{Binding TestMessage}" TextWrapping="Wrap"
-                               Foreground="{Binding TestSucceeded, Converter={x:Static vm:BoolBrushes.Instance}}" />
+                    <SelectableTextBlock Text="{Binding TestMessage}" TextWrapping="Wrap"
+                                         Foreground="{Binding TestSucceeded, Converter={x:Static vm:BoolBrushes.Instance}}" />
                 </Border>
             </StackPanel>
         </ScrollViewer>
 
-        <Grid Grid.Row="2" ColumnDefinitions="Auto,*,Auto,Auto" Margin="0 14 0 0">
-            <Button Grid.Column="0" Content="Test Connection"
-                    Command="{Binding TestCommand}" IsEnabled="{Binding !IsBusy}" Classes="toolbar" />
-            <Button Grid.Column="2" Content="Cancel" Name="CancelButton" Classes="toolbar" Margin="0 0 8 0" />
-            <Button Grid.Column="3" Content="Save" Name="SaveButton" Classes="toolbar accent" />
-        </Grid>
+        <Border Grid.Row="2" Background="#252526" BorderBrush="#3F3F46" BorderThickness="0 1 0 0" Padding="22 12">
+            <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto">
+                <Button Grid.Column="0" Command="{Binding TestCommand}" IsEnabled="{Binding !IsBusy}" Classes="toolbar">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <c:Icon Kind="link" Size="14" />
+                        <TextBlock Text="Test Connection" />
+                    </StackPanel>
+                </Button>
+                <ProgressBar Grid.Column="1" IsIndeterminate="True" IsVisible="{Binding IsBusy}"
+                             Width="60" MinWidth="0" Height="3" Margin="10 0 0 0" VerticalAlignment="Center" />
+                <Button Grid.Column="3" Content="Cancel" Name="CancelButton" Classes="toolbar" Margin="0 0 8 0"
+                        MinWidth="84" HorizontalContentAlignment="Center" />
+                <Button Grid.Column="4" Content="Save" Name="SaveButton" Classes="toolbar accent"
+                        MinWidth="84" HorizontalContentAlignment="Center" />
+            </Grid>
+        </Border>
     </Grid>
 </Window>

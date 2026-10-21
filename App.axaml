@@ -2,7 +2,21 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="Nexus.App"
              xmlns:local="using:Nexus"
+             xmlns:c="using:Nexus.Controls"
+             Name="Nexus"
              RequestedThemeVariant="Dark">
+
+    <!-- macOS application menu (replaces Avalonia's default "About Avalonia" entry) -->
+    <NativeMenu.Menu>
+        <NativeMenu>
+            <NativeMenuItem Header="About Nexus" Click="OnAboutClicked" />
+        </NativeMenu>
+    </NativeMenu.Menu>
+
+    <Application.Resources>
+        <!-- Bundled so the editor and grids look identical on every OS (SIL OFL, see Assets/Fonts) -->
+        <FontFamily x:Key="MonoFont">avares://Nexus/Assets/Fonts#JetBrains Mono</FontFamily>
+    </Application.Resources>
 
     <Application.DataTemplates>
         <local:ViewLocator/>
@@ -13,23 +27,104 @@
         <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml" />
         <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml" />
 
-        <!-- Compact, IDE-like accents -->
+        <!-- Compact, IDE-like defaults -->
+        <Style Selector="Window">
+            <Setter Property="FontSize" Value="13" />
+        </Style>
+
         <Style Selector="Button.toolbar">
             <Setter Property="Padding" Value="10 5" />
+            <Setter Property="MinHeight" Value="30" />
             <Setter Property="Background" Value="#2D2D30" />
             <Setter Property="BorderBrush" Value="#3F3F46" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
         </Style>
         <Style Selector="Button.toolbar:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="#3E3E42" />
+            <Setter Property="BorderBrush" Value="#52525B" />
         </Style>
         <Style Selector="Button.accent">
-            <Setter Property="Background" Value="#0E639C" />
+            <Setter Property="Background" Value="#2563EB" />
+            <Setter Property="BorderBrush" Value="#2563EB" />
             <Setter Property="Foreground" Value="White" />
         </Style>
         <Style Selector="Button.accent:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="#1177BB" />
+            <Setter Property="Background" Value="#3B82F6" />
+            <Setter Property="BorderBrush" Value="#3B82F6" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+        <Style Selector="Button.danger:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#7F1D1D" />
+            <Setter Property="BorderBrush" Value="#B91C1C" />
+        </Style>
+
+        <!-- Square, borderless icon buttons (sidebar header, tab close) -->
+        <Style Selector="Button.icon">
+            <Setter Property="Padding" Value="5" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="Foreground" Value="#C8C8C8" />
+        </Style>
+        <Style Selector="Button.icon:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#3A3A3E" />
+        </Style>
+        <Style Selector="Button.icon:pointerover">
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+
+        <!-- Engine badge ("Pg", "My"…) used in the tree and connection dialog -->
+        <Style Selector="Border.badge">
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="MinWidth" Value="22" />
+            <Setter Property="Height" Value="18" />
+            <Setter Property="Padding" Value="3 0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Border.badge > TextBlock">
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <!-- Tabs: Fluent's default header is 24pt; IDE tabs are compact -->
+        <Style Selector="TabItem">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="MinHeight" Value="34" />
+            <Setter Property="Padding" Value="12 0" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+
+        <!-- Data grids: dark header row instead of Fluent's black strip -->
+        <Style Selector="DataGridColumnHeader">
+            <Setter Property="Background" Value="#2D2D30" />
+            <Setter Property="Foreground" Value="#D4D4D8" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Padding" Value="10 0" />
+            <Setter Property="MinHeight" Value="30" />
+        </Style>
+        <Style Selector="DataGrid">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="HorizontalGridLinesBrush" Value="#333337" />
+            <Setter Property="VerticalGridLinesBrush" Value="#333337" />
+        </Style>
+        <Style Selector="DataGrid /template/ Rectangle#PART_TopRightCornerHeader">
+            <Setter Property="Fill" Value="#2D2D30" />
+        </Style>
+        <Style Selector="DataGrid /template/ Rectangle#PART_ColumnHeadersAndRowsSeparator">
+            <Setter Property="Fill" Value="#3F3F46" />
+        </Style>
+
+        <Style Selector="MenuItem c|Icon">
+            <Setter Property="Size" Value="15" />
+            <Setter Property="StrokeThickness" Value="1.8" />
         </Style>
     </Application.Styles>
 </Application>

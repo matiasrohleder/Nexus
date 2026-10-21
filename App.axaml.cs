@@ -28,4 +28,11 @@ public partial class App : Application
 
         base.OnFrameworkInitializationCompleted();
     }
+
+    /// <summary>macOS app menu → "About Nexus".</summary>
+    private void OnAboutClicked(object? sender, System.EventArgs e)
+    {
+        if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime { MainWindow.DataContext: MainWindowViewModel vm })
+            vm.ShowAboutCommand.Execute(null);
+    }
 }

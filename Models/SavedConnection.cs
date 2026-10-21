@@ -1,10 +1,12 @@
 using System;
+using System.Text.Json.Serialization;
 
 namespace Nexus.Models;
 
 /// <summary>
-/// A persisted PostgreSQL connection profile. The password is stored encrypted
-/// on disk (see <see cref="Services.CryptoService"/>); it is never serialized in clear text.
+/// A persisted connection profile (connections.json). It never holds the password: that lives
+/// in the OS keyring under this profile's <see cref="Id"/> (see <see cref="Services.SecretStore"/>),
+/// so the JSON file can be copied to another machine without leaking credentials.
 /// </summary>
 public sealed class SavedConnection
 {
@@ -22,8 +24,20 @@ public sealed class SavedConnection
     /// <summary>Database file path for file-based engines (SQLite, DuckDB).</summary>
     public string FilePath { get; set; } = string.Empty;
 
-    /// <summary>Encrypted password blob (base64). Set via <see cref="Services.ConnectionStore"/>.</summary>
-    public string EncryptedPassword { get; set; } = string.Empty;
+    /// <summary>
+    /// Pre-0.2 files kept an AES-encrypted password here. Read only so <see cref="Services.ConnectionStore"/>
+    /// can move it into the OS keyring; never written again.
+    /// </summary>
+    [JsonPropertyName("EncryptedPassword")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? LegacyEncryptedPassword { get; set; }
+
+    /// <summary>
+    /// A password typed in the editor but not yet saved. In memory only; <see cref="Services.ConnectionStore.SaveAll"/>
+    /// moves it into the keyring. Lets "Test Connection" work before (or without) saving.
+    /// </summary>
+    [JsonIgnore]
+    public string? PendingPassword { get; set; }
 
     /// <summary>Npgsql SslMode name: Disable, Prefer, Require, VerifyCA, VerifyFull.</summary>
     public string SslMode { get; set; } = "Prefer";
@@ -32,6 +46,11 @@ public sealed class SavedConnection
     public string Color { get; set; } = "#3B82F6";
 
     public SavedConnection Clone() => (SavedConnection)MemberwiseClone();
+
+    // Identity is the profile Id: a database-pinned clone (see the object explorer) still "is" its
+    // saved profile, so pickers and list lookups match it.
+    public override bool Equals(object? obj) => obj is SavedConnection other && other.Id == Id;
+    public override int GetHashCode() => Id.GetHashCode();
 
     public override string ToString() => Name;
 }

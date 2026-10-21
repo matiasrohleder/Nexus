@@ -14,6 +14,7 @@ namespace Nexus.ViewModels;
 public partial class ConnectionEditorViewModel : ViewModelBase
 {
     private readonly SavedConnection _target;
+    private readonly string _originalPassword;
     private bool _applyingDefaults;
 
     // ---- engine tiles ----
@@ -56,9 +57,16 @@ public partial class ConnectionEditorViewModel : ViewModelBase
     public IReadOnlyList<string> SslModes { get; } =
         new[] { "Disable", "Allow", "Prefer", "Require", "VerifyCA", "VerifyFull" };
 
-    /// <summary>Predefined accent colors (click-to-pick swatches).</summary>
-    public IReadOnlyList<string> ColorSwatches { get; } =
-        new[] { "#3B82F6", "#22C55E", "#EF4444", "#F59E0B", "#A855F7", "#14B8A6", "#64748B" };
+    /// <summary>Predefined accent colors (click-to-pick swatches); the current one is ringed.</summary>
+    public IReadOnlyList<ColorSwatch> ColorSwatches { get; } =
+        new[] { "#3B82F6", "#22C55E", "#EF4444", "#F59E0B", "#A855F7", "#14B8A6", "#64748B" }
+            .Select(h => new ColorSwatch(h)).ToArray();
+
+    partial void OnColorChanged(string value)
+    {
+        foreach (var s in ColorSwatches)
+            s.IsSelected = string.Equals(s.Hex, value, StringComparison.OrdinalIgnoreCase);
+    }
 
     /// <summary>Wired by the view: opens a file picker and returns the chosen path (file-based engines).</summary>
     public Func<Task<string?>>? PickFile { get; set; }
@@ -76,10 +84,11 @@ public partial class ConnectionEditorViewModel : ViewModelBase
         _port = existing is null ? _selectedEngine.DefaultPort : _target.Port;
         _database = existing is null ? _selectedEngine.DefaultDatabase : _target.Database;
         _username = existing is null ? _selectedEngine.DefaultUsername : _target.Username;
-        _password = ConnectionStore.GetPassword(_target);
+        _password = _originalPassword = ConnectionStore.GetPassword(_target);
         _filePath = _target.FilePath;
         _sslMode = _target.SslMode;
         _color = _target.Color;
+        OnColorChanged(_color);
     }
 
     /// <summary>Switching engine re-applies that engine's defaults for port/user/database.</summary>
@@ -94,7 +103,13 @@ public partial class ConnectionEditorViewModel : ViewModelBase
         _applyingDefaults = false;
     }
 
-    /// <summary>Applies the edited fields back onto a SavedConnection, encrypting the password.</summary>
+    /// <summary>Where saved passwords go (OS keyring name), shown under the password field.</summary>
+    public string PasswordStorageText { get; } = $"Stored securely in {SecretStore.LocationName} — never in connections.json";
+
+    /// <summary>
+    /// Applies the edited fields back onto a SavedConnection. A changed password is only held in
+    /// memory here; it reaches the keyring when the caller saves the connection list.
+    /// </summary>
     public SavedConnection Commit()
     {
         _target.Provider = SelectedEngine.Id;
@@ -106,7 +121,8 @@ public partial class ConnectionEditorViewModel : ViewModelBase
         _target.FilePath = FilePath.Trim();
         _target.SslMode = SslMode;
         _target.Color = Color;
-        ConnectionStore.SetPassword(_target, Password);
+        if (Password != _originalPassword || _target.PendingPassword is not null)
+            ConnectionStore.SetPassword(_target, Password);
         return _target;
     }
 
@@ -246,4 +262,11 @@ public partial class ConnectionEditorViewModel : ViewModelBase
             IsBusy = false;
         }
     }
+}
+
+/// <summary>One accent-color choice in the connection dialog.</summary>
+public partial class ColorSwatch(string hex) : ObservableObject
+{
+    public string Hex { get; } = hex;
+    [ObservableProperty] private bool _isSelected;
 }

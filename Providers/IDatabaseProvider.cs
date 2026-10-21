@@ -51,7 +51,8 @@ public interface IDatabaseProvider
     // ---- identity / connection-dialog metadata ----
     string Id { get; }               // "postgresql"
     string DisplayName { get; }      // "PostgreSQL"
-    string Glyph { get; }            // tile icon
+    string Badge { get; }            // two-letter tile/tree badge ("Pg")
+    string BrandColor { get; }       // badge background (hex)
     int DefaultPort { get; }
     string DefaultUsername { get; }
     string DefaultDatabase { get; }

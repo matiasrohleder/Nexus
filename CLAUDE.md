@@ -11,9 +11,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 dotnet build -c Debug                 # build
 dotnet run -c Debug                   # run the GUI
-dotnet publish -c Release -o dist     # publish (framework-dependent); binary at dist/Nexus
-./run.sh                              # run published binary (falls back to dotnet run)
+./run.sh                              # run dist/Nexus if present (falls back to dotnet run)
+
+packaging/linux/build.sh              # .deb + .rpm (needs rpmbuild) + .tar.gz → artifacts/
+packaging/macos/build.sh osx-arm64    # .app + .dmg (macOS only; osx-x64 for Intel)
+pwsh packaging/windows/build.ps1      # Inno Setup setup.exe (Windows only)
+python3 packaging/generate-icons.py   # regenerate every icon format from code (Pillow)
 ```
+
+`.github/workflows/installers.yml` builds all installers on every push, really installs them on
+Windows/macOS/Ubuntu (+ Fedora/Debian containers) and runs `--selftest sqlite|duckdb|secrets`
+against the installed app. A tag `v<Version>` publishes a GitHub Release.
 
 ### Tests (self-test matrix against real databases)
 
@@ -29,7 +37,14 @@ NEXUS_TEST_USER=postgres NEXUS_TEST_PW=nexus123 dotnet run -- --selftest
 dotnet run -- --selftest mysql            # network engines use the NEXUS_TEST_* vars
 NEXUS_TEST_FILE=/tmp/t.db dotnet run -- --selftest sqlite    # file-based engines
 # ids: postgresql mysql mariadb sqlserver oracle sqlite duckdb clickhouse mongodb redis
+
+# OS keyring round-trip, legacy migration, and "connections.json has no secrets"
+dotnet run -- --selftest secrets
 ```
+
+Self-tests must never touch the user's real data: they call `SecretStore.UseEphemeral()` (engine
+suites) or `AppPaths.RedirectForTests(tempDir)` (anything that saves/loads `connections.json`).
+An earlier version that backed up/restored the real file deleted a user's legacy `key.bin`.
 
 Exit code 0 = all checks passed. Both harnesses set `QueryProfiler.Instance.DirectDispatch = true`
 and `IsCapturing = true` (the profiler is opt-in in the app but tests rely on it).
@@ -89,10 +104,21 @@ driver. Key ideas that span multiple files:
   dropped) and calls `PrepareDropDatabaseAsync` first to clear the driver's connection pools —
   Nexus's own pooled connections from tree browsing otherwise block the drop. Offers force-drop /
   CASCADE on dependency errors; nothing may fail silently (always `Notify`).
-- **Persistence** (all under `~/.config/Nexus/`): `connections.json` (passwords AES-256-GCM
-  encrypted via `CryptoService`; key in `key.bin`, mode 0600 — plaintext never touches disk),
-  `settings.json` (UI prefs, e.g. sidebar side), `history.json` / `snippets.json`. Old files
-  without newer fields migrate via serializer defaults (e.g. `Provider` defaults to postgresql).
+- **Persistence** (`AppPaths.ConfigDir`: `~/.config/Nexus`, `~/Library/Application Support/Nexus`,
+  `%APPDATA%\Nexus`): `connections.json`, `settings.json` (UI prefs, e.g. sidebar side),
+  `history.json` / `snippets.json`. Old files without newer fields migrate via serializer
+  defaults (e.g. `Provider` defaults to postgresql).
+- **Passwords never go in `connections.json`** (it's exportable/portable). `SecretStore` keeps
+  them in the OS keyring keyed by connection `Id` — Windows Credential Manager, macOS Keychain,
+  Linux Secret Service via libsecret — all by direct P/Invoke (`SecretBackends.cs`, no CLI
+  helpers, so secrets never hit argv). No reachable keyring → AES-GCM vault in
+  `AppPaths.DataDir` (never next to the JSON). Flow: the editor sets
+  `SavedConnection.PendingPassword` (memory only, so Test works before saving) and
+  `ConnectionStore.SaveAll` commits it to the keyring; `GetPassword` = pending ?? keyring.
+  Removing a connection calls `ForgetPassword`. Pre-0.2 `EncryptedPassword` blobs
+  (`LegacyEncryptedPassword` + `key.bin`) are migrated into the keyring on `Load`.
+- `SavedConnection` equality is by `Id`, so database-pinned clones match their profile in
+  pickers and `IndexOf`.
 - **Singletons**: `QueryProfiler.Instance` (all query logging; UI-thread marshalled unless
   `DirectDispatch`), `QueryHistoryStore.Instance`, `SchemaCache` (autocomplete words per
   connection; invalidate on tree refresh).
@@ -109,6 +135,12 @@ driver. Key ideas that span multiple files:
   string indexer (`Binding("[i]")`) because the schema is only known at runtime.
 - Package name quirk: the editor package is `Avalonia.AvaloniaEdit` (theme at
   `avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml`); DataGrid version lags core Avalonia.
+- **No emoji in the UI** — emoji fonts differ per OS and are missing on many Linux installs
+  (they render as tofu). Use `Controls/Icon` (`<c:Icon Kind="table" />`, stroked 24×24 paths;
+  add new kinds to its `Paths` table). Engines show a two-letter `Badge` on their `BrandColor`.
+- Monospace text uses the bundled JetBrains Mono via `{StaticResource MonoFont}` (App.axaml).
+- Two-way `ComboBox.SelectedItem` bindings push `null` while a tab's view re-binds; bind to a
+  null-ignoring proxy (`QueryDocumentViewModel.ConnectionChoice`/`DatabaseChoice`).
 
 ### Headless testing / screenshots (scratchpad `Shot/` harness pattern)
 
@@ -122,16 +154,18 @@ and inject into the VM.
 
 ## Versioning
 
-Semantic versioning starting at **0.1.0**. The single source of truth is `<Version>` in
+Semantic versioning starting at **0.1.0** (0.2.0 = OS keyring + installers). The single source of truth is `<Version>` in
 `Nexus.csproj`; `Services/AppInfo.cs` reads it from the assembly at runtime and the top bar
-renders it as "Nexus — {version}" (`MainWindowViewModel.VersionText`). To release: bump
-`<Version>`, republish. Don't hardcode the version anywhere else.
+renders it as "Nexus — {version}" (`MainWindowViewModel.VersionText`); the packaging scripts
+read it from the csproj too. To release: bump `<Version>`, commit, push tag `v<Version>`.
+Don't hardcode the version anywhere else.
 
 ## Product decisions (don't regress)
 
 - Window/app title is just **"Nexus"** — no subtitle; the version appears next to it as
-  "— 0.1.0". No "New Connection" button in the top bar (sidebar ＋ only). Sidebar side is
-  user-toggleable (⇄) and persisted.
+  "— 0.2.0". No "New Connection" button in the top bar (sidebar ＋ only). Sidebar side is
+  user-toggleable (⋯ menu) and persisted.
+- Removing a connection asks for confirmation (it also deletes the keyring entry).
 - New query tabs start **empty**; the **profiler starts off** (opt-in).
 - "View Data" generates an **explicit, line-broken column list** (one column per line, dialect
   LIMIT/TOP/FETCH), falling back to `*` only if introspection fails.
@@ -152,9 +186,9 @@ Pending work, roughly in priority order:
    prefix; `SupportsExplain=false` today).
 5. **Window state persistence** (size/position/splitter widths in `AppSettings`) and a
    light-theme toggle.
-6. **Cross-OS publishes**: `dotnet publish -r win-x64 / osx-arm64` + packaging; today only the
-   Linux framework-dependent build in `dist/` is exercised.
+6. **Code signing**: buy/configure a Windows Authenticode cert and an Apple Developer ID so the
+   installers open without SmartScreen/Gatekeeper prompts (the scripts already accept them).
 7. **CSV import for ClickHouse** (fails today — no transactions; needs a batch INSERT path).
 8. **Result grid virtualization / paging beyond the 10k row cap** for very wide result sets.
-9. **CI**: script the Docker matrix (`--selftest` loop) so regressions are caught automatically;
-   Oracle gated behind a flag because of its size.
+9. **CI for the engine matrix**: the installers workflow covers SQLite/DuckDB/secrets; add the
+   Docker engines (`--selftest` loop), Oracle gated behind a flag because of its size.

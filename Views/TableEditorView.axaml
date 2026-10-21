@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Nexus.ViewModels"
+             xmlns:c="using:Nexus.Controls"
              x:Class="Nexus.Views.TableEditorView"
              x:DataType="vm:TableEditorViewModel">
 
@@ -8,15 +9,23 @@
         <!-- Toolbar -->
         <Border Grid.Row="0" Background="#252526" Padding="8 6" BorderBrush="#3F3F46" BorderThickness="0 0 0 1">
             <StackPanel Orientation="Horizontal" Spacing="8">
-                <Button Content="＋ Add Row" Classes="toolbar" Command="{Binding AddRowCommand}"
-                        IsEnabled="{Binding !IsReadOnly}" />
-                <Button Content="🗑 Delete Row" Classes="toolbar" Command="{Binding DeleteRowCommand}"
-                        IsEnabled="{Binding !IsReadOnly}" />
-                <Separator Width="1" Height="20" Background="#3F3F46" />
-                <Button Content="💾 Commit" Classes="toolbar accent" Command="{Binding CommitCommand}"
-                        IsEnabled="{Binding !IsReadOnly}" />
-                <Button Content="↶ Revert" Classes="toolbar" Command="{Binding RevertCommand}" />
-                <Button Content="⟳ Refresh" Classes="toolbar" Command="{Binding LoadCommand}" />
+                <Button Classes="toolbar" Command="{Binding AddRowCommand}" IsEnabled="{Binding !IsReadOnly}">
+                    <StackPanel Orientation="Horizontal" Spacing="6"><c:Icon Kind="plus" Size="14" /><TextBlock Text="Add Row" /></StackPanel>
+                </Button>
+                <Button Classes="toolbar danger" Command="{Binding DeleteRowCommand}" IsEnabled="{Binding !IsReadOnly}">
+                    <StackPanel Orientation="Horizontal" Spacing="6"><c:Icon Kind="trash" Size="14" /><TextBlock Text="Delete Row" /></StackPanel>
+                </Button>
+                <Border Width="1" Height="20" Background="#3F3F46" VerticalAlignment="Center" />
+                <Button Classes="toolbar accent" Command="{Binding CommitCommand}" IsEnabled="{Binding !IsReadOnly}"
+                        ToolTip.Tip="Apply all changes in one transaction">
+                    <StackPanel Orientation="Horizontal" Spacing="6"><c:Icon Kind="check" Size="14" /><TextBlock Text="Commit" /></StackPanel>
+                </Button>
+                <Button Classes="toolbar" Command="{Binding RevertCommand}">
+                    <StackPanel Orientation="Horizontal" Spacing="6"><c:Icon Kind="undo" Size="14" /><TextBlock Text="Revert" /></StackPanel>
+                </Button>
+                <Button Classes="toolbar" Command="{Binding LoadCommand}">
+                    <StackPanel Orientation="Horizontal" Spacing="6"><c:Icon Kind="refresh" Size="14" /><TextBlock Text="Refresh" /></StackPanel>
+                </Button>
             </StackPanel>
         </Border>
 
@@ -27,7 +36,7 @@
                   SelectedItem="{Binding SelectedRow}"
                   CanUserResizeColumns="True" CanUserSortColumns="False"
                   GridLinesVisibility="All"
-                  FontFamily="Cascadia Code,Consolas,monospace" FontSize="13" />
+                  FontFamily="{StaticResource MonoFont}" FontSize="12" />
 
         <!-- Status -->
         <Border Grid.Row="2" Background="#252526" Padding="10 5" BorderBrush="#3F3F46" BorderThickness="0 1 0 0">

@@ -5,55 +5,76 @@ using System.Security.Cryptography;
 namespace Nexus.Services;
 
 /// <summary>
-/// Encrypts/decrypts saved-connection passwords with AES-256-GCM. The key is a random
-/// 32-byte value stored once at ~/.config/Nexus/key.bin with 0600 permissions, so passwords
-/// are never written to disk in clear text. This is local-desktop protection (parity with how
-/// GUI DB tools store credentials) — not a substitute for a system keyring.
+/// AES-256-GCM with a random 32-byte key kept in a file (mode 0600 on Unix). Used only by the
+/// fallback vault (machines without an OS keyring) and to migrate pre-0.2 passwords, which were
+/// stored inside connections.json with <see cref="AppPaths.LegacyKeyFile"/>.
 /// </summary>
-public static class CryptoService
+public sealed class CryptoService
 {
     private const int NonceSize = 12; // AES-GCM standard nonce
     private const int TagSize = 16;   // AES-GCM standard tag
 
-    private static readonly Lazy<byte[]> Key = new(LoadOrCreateKey);
+    private readonly string _keyPath;
+    private readonly bool _createKey;
+    private byte[]? _key;
 
-    private static byte[] LoadOrCreateKey()
+    /// <summary>Reads the pre-0.2 key; never creates one.</summary>
+    public static CryptoService Legacy => new(AppPaths.LegacyKeyFile, createKey: false);
+
+    public CryptoService(string keyPath, bool createKey = true)
     {
-        var path = AppPaths.KeyFile;
-        if (File.Exists(path))
+        _keyPath = keyPath;
+        _createKey = createKey;
+    }
+
+    private byte[]? Key => _key ??= LoadOrCreateKey();
+
+    private byte[]? LoadOrCreateKey()
+    {
+        if (File.Exists(_keyPath))
         {
-            var existing = File.ReadAllBytes(path);
+            var existing = File.ReadAllBytes(_keyPath);
             if (existing.Length == 32) return existing;
         }
+        if (!_createKey) return null;
 
         var key = RandomNumberGenerator.GetBytes(32);
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllBytes(path, key);
-        TryRestrictPermissions(path);
+        Directory.CreateDirectory(Path.GetDirectoryName(_keyPath)!);
+        WriteRestricted(_keyPath, key);
         return key;
     }
 
-    private static void TryRestrictPermissions(string path)
+    /// <summary>Writes a file readable only by the current user (0600 from creation on Unix).</summary>
+    public static void WriteRestricted(string path, byte[] contents)
     {
-        try
+        if (OperatingSystem.IsWindows())
         {
-            if (!OperatingSystem.IsWindows())
-                File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            File.WriteAllBytes(path, contents);
+            return;
         }
-        catch { /* best effort */ }
+        using var fs = new FileStream(path, new FileStreamOptions
+        {
+            Mode = FileMode.Create,
+            Access = FileAccess.Write,
+            UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite
+        });
+        fs.Write(contents);
+        File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
     }
 
-    public static string Encrypt(string plainText)
+    public string Encrypt(string plainText)
     {
         if (string.IsNullOrEmpty(plainText)) return string.Empty;
+        var key = Key ?? throw new InvalidOperationException("No encryption key available.");
 
         var plain = System.Text.Encoding.UTF8.GetBytes(plainText);
         var nonce = RandomNumberGenerator.GetBytes(NonceSize);
         var cipher = new byte[plain.Length];
         var tag = new byte[TagSize];
 
-        using var aes = new AesGcm(Key.Value, TagSize);
+        using var aes = new AesGcm(key, TagSize);
         aes.Encrypt(nonce, plain, cipher, tag);
+        CryptographicOperations.ZeroMemory(plain);
 
         // layout: nonce | tag | cipher
         var blob = new byte[NonceSize + TagSize + cipher.Length];
@@ -63,9 +84,9 @@ public static class CryptoService
         return Convert.ToBase64String(blob);
     }
 
-    public static string Decrypt(string encrypted)
+    public string Decrypt(string encrypted)
     {
-        if (string.IsNullOrEmpty(encrypted)) return string.Empty;
+        if (string.IsNullOrEmpty(encrypted) || Key is not { } key) return string.Empty;
 
         try
         {
@@ -77,9 +98,11 @@ public static class CryptoService
             var cipher = blob.AsSpan(NonceSize + TagSize);
             var plain = new byte[cipher.Length];
 
-            using var aes = new AesGcm(Key.Value, TagSize);
+            using var aes = new AesGcm(key, TagSize);
             aes.Decrypt(nonce, cipher, tag, plain);
-            return System.Text.Encoding.UTF8.GetString(plain);
+            var text = System.Text.Encoding.UTF8.GetString(plain);
+            CryptographicOperations.ZeroMemory(plain);
+            return text;
         }
         catch
         {

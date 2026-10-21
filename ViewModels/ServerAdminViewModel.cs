@@ -36,10 +36,12 @@ public partial class ServerAdminViewModel : DocumentViewModel
 
     private ServerVariable[] _allVariables = Array.Empty<ServerVariable>();
 
+    public override string Icon => "server";
+
     public ServerAdminViewModel(SavedConnection connection)
     {
         Connection = connection;
-        Title = $"🖥 {connection.Name}";
+        Title = connection.Name;
         _ = RefreshAsync();
     }
 

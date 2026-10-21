@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Nexus.ViewModels"
              xmlns:ae="using:AvaloniaEdit"
+             xmlns:c="using:Nexus.Controls"
              x:Class="Nexus.Views.QueryDocumentView"
              x:DataType="vm:QueryDocumentViewModel">
 
@@ -10,45 +11,67 @@
         <!-- Toolbar -->
         <Border Grid.Row="0" Background="#252526" Padding="8 6" BorderBrush="#3F3F46" BorderThickness="0 0 0 1">
             <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,*,Auto">
-                <Button Grid.Column="0" Content="▶  Run  (F5)" Classes="toolbar accent"
-                        Command="{Binding RunCommand}" IsEnabled="{Binding !IsRunning}" />
-                <Button Grid.Column="1" Content="■ Stop" Classes="toolbar" Margin="6 0 0 0"
-                        Command="{Binding StopCommand}" IsVisible="{Binding IsRunning}" />
-                <Button Grid.Column="2" Content="⚡ Explain" Classes="toolbar" Margin="6 0 0 0"
+                <Button Grid.Column="0" Classes="toolbar accent" ToolTip.Tip="Run (F5 / Ctrl+Enter) — runs the selection if any"
+                        Command="{Binding RunCommand}" IsEnabled="{Binding !IsRunning}">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                        <c:Icon Kind="play" Size="13" />
+                        <TextBlock Text="Run" />
+                        <TextBlock Text="F5" Opacity="0.65" FontSize="11" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+                <Button Grid.Column="1" Classes="toolbar danger" Margin="6 0 0 0"
+                        Command="{Binding StopCommand}" IsVisible="{Binding IsRunning}">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                        <c:Icon Kind="stop" Size="13" Foreground="#F87171" />
+                        <TextBlock Text="Stop" />
+                    </StackPanel>
+                </Button>
+                <Button Grid.Column="2" Classes="toolbar" Margin="6 0 0 0" ToolTip.Tip="Show the execution plan"
                         Command="{Binding ExplainCommand}" IsVisible="{Binding SupportsExplain}"
-                        IsEnabled="{Binding !IsRunning}" />
+                        IsEnabled="{Binding !IsRunning}">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                        <c:Icon Kind="zap" Size="14" />
+                        <TextBlock Text="Explain" />
+                    </StackPanel>
+                </Button>
                 <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4" Margin="6 0 0 0">
-                    <Button Content="📂" Classes="toolbar" ToolTip.Tip="Open .sql file (Ctrl+O)"
-                            Command="{Binding OpenFileCommand}" />
-                    <Button Content="💾" Classes="toolbar" ToolTip.Tip="Save .sql file (Ctrl+S)"
-                            Command="{Binding SaveFileCommand}" />
-                    <Button Content="★" Classes="toolbar" ToolTip.Tip="Save as snippet"
-                            Command="{Binding SaveSnippetCommand}" />
+                    <Button Classes="toolbar" ToolTip.Tip="Open .sql file (Ctrl+O)"
+                            Command="{Binding OpenFileCommand}">
+                        <c:Icon Kind="open" Size="15" />
+                    </Button>
+                    <Button Classes="toolbar" ToolTip.Tip="Save .sql file (Ctrl+S)"
+                            Command="{Binding SaveFileCommand}">
+                        <c:Icon Kind="save" Size="15" />
+                    </Button>
+                    <Button Classes="toolbar" ToolTip.Tip="Save as snippet"
+                            Command="{Binding SaveSnippetCommand}">
+                        <c:Icon Kind="star" Size="15" />
+                    </Button>
                 </StackPanel>
 
                 <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="6" Margin="12 0 0 0"
                             VerticalAlignment="Center">
-                    <TextBlock Text="Connection:" VerticalAlignment="Center" Opacity="0.7" />
+                    <TextBlock Text="Connection" VerticalAlignment="Center" Opacity="0.6" FontSize="12" />
                     <ComboBox MinWidth="160" x:CompileBindings="False"
                               ItemsSource="{Binding DataContext.Connections, RelativeSource={RelativeSource AncestorType=Window}}"
-                              SelectedItem="{Binding Connection}" />
-                    <TextBlock Text="DB:" VerticalAlignment="Center" Opacity="0.7"
+                              SelectedItem="{Binding ConnectionChoice}" />
+                    <TextBlock Text="Database" VerticalAlignment="Center" Opacity="0.6" FontSize="12"
                                IsVisible="{Binding HasDatabases}" />
                     <ComboBox MinWidth="120"
                               ItemsSource="{Binding Databases}"
-                              SelectedItem="{Binding SelectedDatabase}"
+                              SelectedItem="{Binding DatabaseChoice}"
                               IsVisible="{Binding HasDatabases}" />
                 </StackPanel>
 
                 <TextBlock Grid.Column="6" Text="{Binding StatusText}" VerticalAlignment="Center"
-                           Opacity="0.85" Margin="0 0 4 0" />
+                           Opacity="0.7" Margin="12 0 4 0" FontSize="12" TextTrimming="CharacterEllipsis" />
             </Grid>
         </Border>
 
         <!-- SQL editor -->
         <ae:TextEditor Grid.Row="1" Name="Editor"
                        ShowLineNumbers="True"
-                       FontFamily="Cascadia Code,Consolas,Menlo,monospace"
+                       FontFamily="{StaticResource MonoFont}"
                        FontSize="14"
                        Background="#1E1E1E"
                        HorizontalScrollBarVisibility="Auto"
@@ -61,12 +84,12 @@
                 Background="#3A1D1D" BorderBrush="#F48771" BorderThickness="1" CornerRadius="4"
                 Margin="6 6 6 0" Padding="10 8">
             <Grid ColumnDefinitions="Auto,*,Auto">
-                <TextBlock Grid.Column="0" Text="⛔" FontSize="15" Foreground="#F48771"
-                           VerticalAlignment="Top" Margin="0 0 8 0" />
+                <c:Icon Grid.Column="0" Kind="error" Size="17" Foreground="#F48771"
+                        VerticalAlignment="Top" Margin="0 1 10 0" />
                 <ScrollViewer Grid.Column="1" MaxHeight="140" VerticalScrollBarVisibility="Auto">
                     <SelectableTextBlock Text="{Binding ErrorText}" TextWrapping="Wrap"
                                          Foreground="#F48771"
-                                         FontFamily="Cascadia Code,Consolas,monospace" FontSize="13" />
+                                         FontFamily="{StaticResource MonoFont}" FontSize="12" />
                 </ScrollViewer>
                 <Button Grid.Column="2" Name="CopyErrorButton" Content="Copy" Classes="toolbar" FontSize="12"
                         VerticalAlignment="Top" Margin="8 0 0 0" />
@@ -88,23 +111,33 @@
                                 </DataTemplate>
                             </ComboBox.ItemTemplate>
                         </ComboBox>
-                        <Button Content="⬇ CSV" Classes="toolbar" FontSize="12"
-                                Command="{Binding ExportCsvCommand}" ToolTip.Tip="Export results to CSV" />
-                        <Button Content="⬇ JSON" Classes="toolbar" FontSize="12"
-                                Command="{Binding ExportJsonCommand}" ToolTip.Tip="Export results to JSON" />
+                        <Button Classes="toolbar" FontSize="12" MinHeight="26" Padding="8 3"
+                                Command="{Binding ExportCsvCommand}" ToolTip.Tip="Export results to CSV">
+                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                <c:Icon Kind="download" Size="13" />
+                                <TextBlock Text="CSV" />
+                            </StackPanel>
+                        </Button>
+                        <Button Classes="toolbar" FontSize="12" MinHeight="26" Padding="8 3"
+                                Command="{Binding ExportJsonCommand}" ToolTip.Tip="Export results to JSON">
+                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                <c:Icon Kind="download" Size="13" />
+                                <TextBlock Text="JSON" />
+                            </StackPanel>
+                        </Button>
                     </StackPanel>
                     <DataGrid Grid.Row="1" Name="ResultsGrid"
                               AutoGenerateColumns="False" IsReadOnly="True"
                               CanUserResizeColumns="True" CanUserSortColumns="False"
                               GridLinesVisibility="All"
-                              FontFamily="Cascadia Code,Consolas,monospace"
-                              FontSize="13" />
+                              FontFamily="{StaticResource MonoFont}"
+                              FontSize="12" />
                 </Grid>
             </TabItem>
             <TabItem Header="Messages">
                 <TextBox Text="{Binding MessagesText}" IsReadOnly="True"
                          AcceptsReturn="True" TextWrapping="Wrap"
-                         FontFamily="Cascadia Code,Consolas,monospace"
+                         FontFamily="{StaticResource MonoFont}"
                          Background="#1E1E1E" BorderThickness="0" />
             </TabItem>
         </TabControl>

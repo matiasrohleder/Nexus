@@ -1,0 +1,207 @@
+# Builds, installs and smoke-tests the Nexus installers on Linux, Windows and macOS.
+# Pushing a tag "v<version>" (matching <Version> in Nexus.csproj) also publishes a GitHub Release
+# with every installer attached.
+name: Installers
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Install packaging tools
+        run: sudo apt-get update && sudo apt-get install -y rpm desktop-file-utils gnome-keyring dbus-x11 libsecret-1-0
+
+      - name: Build installers (.deb, .rpm, .tar.gz)
+        run: packaging/linux/build.sh linux-x64
+
+      - name: Validate desktop entry
+        run: desktop-file-validate packaging/linux/nexus.desktop
+
+      - name: Install the .deb and run the installed app
+        run: |
+          sudo apt-get install -y ./artifacts/Nexus-*-linux-x64.deb
+          test -x /usr/bin/nexus && test -f /usr/share/applications/nexus.desktop
+          NEXUS_TEST_FILE=/tmp/t.db  nexus --selftest sqlite
+          NEXUS_TEST_FILE=/tmp/t.duckdb nexus --selftest duckdb
+
+      - name: Secrets in the system keyring (GNOME Keyring via Secret Service)
+        run: |
+          dbus-run-session -- sh -c '
+            printf "ci" | gnome-keyring-daemon --unlock --components=secrets >/dev/null
+            gnome-keyring-daemon --start --components=secrets >/dev/null
+            nexus --selftest secrets | tee /tmp/secrets.log
+            grep -q "Secret Service" /tmp/secrets.log'
+
+      - name: Secrets without a keyring (encrypted vault fallback)
+        run: env -u DBUS_SESSION_BUS_ADDRESS DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent nexus --selftest secrets
+
+      - name: Remove the .deb
+        run: sudo apt-get remove -y nexus-db && test ! -e /usr/bin/nexus
+
+      - name: Install the .rpm on Fedora and run it
+        run: |
+          docker run --rm -v "$PWD/artifacts:/a" fedora:latest sh -ec '
+            dnf install -y /a/Nexus-*-linux-x64.rpm
+            NEXUS_TEST_FILE=/tmp/t.db nexus --selftest sqlite
+            dnf remove -y nexus-db'
+
+      - name: Install the .deb on Debian 12 and run it
+        run: |
+          docker run --rm -v "$PWD/artifacts:/a" debian:12 sh -ec '
+            apt-get update -qq && apt-get install -y -qq /a/Nexus-*-linux-x64.deb
+            NEXUS_TEST_FILE=/tmp/t.db nexus --selftest sqlite'
+
+      - name: Per-user install from the .tar.gz
+        run: |
+          mkdir -p /tmp/tar && tar -C /tmp/tar -xzf artifacts/Nexus-*-linux-x64.tar.gz
+          /tmp/tar/Nexus-*/install.sh
+          NEXUS_TEST_FILE=/tmp/u.db ~/.local/bin/nexus --selftest sqlite
+          /tmp/tar/Nexus-*/install.sh --uninstall && test ! -e ~/.local/bin/nexus
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: |
+            artifacts/*.deb
+            artifacts/*.rpm
+            artifacts/*.tar.gz
+
+  windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Install Inno Setup
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
+
+      - name: Build installer
+        run: pwsh packaging/windows/build.ps1
+
+      - name: Silent install, run the installed app, uninstall
+        run: |
+          $setup = Get-ChildItem artifacts\Nexus-*-windows-x64-setup.exe | Select-Object -First 1
+          $p = Start-Process $setup.FullName -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/CURRENTUSER','/NORESTART' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "installer exit code $($p.ExitCode)" }
+          $exe = Join-Path $env:LOCALAPPDATA 'Programs\Nexus\Nexus.exe'
+          if (-not (Test-Path $exe)) { throw "Nexus.exe not installed at $exe" }
+          $lnk = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Nexus.lnk'
+          if (-not (Test-Path $lnk)) { throw 'Start menu shortcut missing' }
+
+          function Run-SelfTest($suite, $file) {
+            $env:NEXUS_TEST_FILE = $file
+            $log = Join-Path $env:RUNNER_TEMP "selftest-$suite.log"
+            $r = Start-Process $exe -ArgumentList '--selftest', $suite -Wait -PassThru -NoNewWindow -RedirectStandardOutput $log
+            Get-Content $log
+            if ($r.ExitCode -ne 0) { throw "selftest $suite failed ($($r.ExitCode))" }
+          }
+          Run-SelfTest 'sqlite'  (Join-Path $env:RUNNER_TEMP 't.db')
+          Run-SelfTest 'duckdb'  (Join-Path $env:RUNNER_TEMP 't.duckdb')
+          Run-SelfTest 'secrets' ''
+          if (-not (Select-String -Path (Join-Path $env:RUNNER_TEMP 'selftest-secrets.log') -Pattern 'Credential Manager' -Quiet)) { throw 'secrets did not use Credential Manager' }
+
+          $uninst = Join-Path $env:LOCALAPPDATA 'Programs\Nexus\unins000.exe'
+          $u = Start-Process $uninst -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait -PassThru
+          if ($u.ExitCode -ne 0) { throw "uninstaller exit code $($u.ExitCode)" }
+          Start-Sleep -Seconds 3
+          if (Test-Path $exe) { throw 'Nexus.exe still present after uninstall' }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: artifacts/*.exe
+
+  macos:
+    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        rid: [osx-arm64, osx-x64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Rosetta (to run the Intel build on the Apple Silicon runner)
+        if: matrix.rid == 'osx-x64'
+        run: softwareupdate --install-rosetta --agree-to-license || true
+
+      - name: Build .app and .dmg
+        run: packaging/macos/build.sh ${{ matrix.rid }}
+
+      - name: Mount the .dmg and run the app inside it
+        run: |
+          dmg=$(ls artifacts/Nexus-*-macos-*.dmg)
+          hdiutil verify "$dmg"
+          mnt=$(mktemp -d)
+          hdiutil attach "$dmg" -mountpoint "$mnt" -nobrowse -readonly
+          test -L "$mnt/Applications"
+          cp -R "$mnt/Nexus.app" /tmp/Nexus.app
+          hdiutil detach "$mnt"
+          codesign --verify --deep --strict /tmp/Nexus.app
+          plutil -lint /tmp/Nexus.app/Contents/Info.plist
+          run() { if [ "${{ matrix.rid }}" = osx-x64 ]; then arch -x86_64 "$@"; else "$@"; fi; }
+          NEXUS_TEST_FILE=/tmp/t.db      run /tmp/Nexus.app/Contents/MacOS/Nexus --selftest sqlite
+          NEXUS_TEST_FILE=/tmp/t.duckdb  run /tmp/Nexus.app/Contents/MacOS/Nexus --selftest duckdb
+
+      - name: Secrets in the macOS Keychain
+        run: |
+          security create-keychain -p ci nexus-ci.keychain
+          security list-keychains -d user -s nexus-ci.keychain $(security list-keychains -d user | tr -d '"')
+          security default-keychain -s nexus-ci.keychain
+          security unlock-keychain -p ci nexus-ci.keychain
+          security set-keychain-settings nexus-ci.keychain
+          run() { if [ "${{ matrix.rid }}" = osx-x64 ]; then arch -x86_64 "$@"; else "$@"; fi; }
+          run /tmp/Nexus.app/Contents/MacOS/Nexus --selftest secrets | tee /tmp/secrets.log
+          grep -q "macOS Keychain" /tmp/secrets.log
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ matrix.rid }}
+          path: artifacts/*.dmg
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux, windows, macos]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tag must match <Version>
+        run: |
+          version=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Nexus.csproj)
+          [ "v$version" = "${GITHUB_REF_NAME}" ] || { echo "tag ${GITHUB_REF_NAME} != v$version"; exit 1; }
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        run: cd dist && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* --title "Nexus ${GITHUB_REF_NAME#v}" \
+            --notes "Download the installer for your system below — see the README for step-by-step instructions." \
+            --generate-notes

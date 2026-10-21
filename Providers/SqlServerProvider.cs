@@ -13,7 +13,8 @@ public sealed class SqlServerProvider : SqlProviderBase
 {
     public override string Id => "sqlserver";
     public override string DisplayName => "SQL Server";
-    public override string Glyph => "🟥";
+    public override string Badge => "MS";
+    public override string BrandColor => "#B91C1C";
     public override int DefaultPort => 1433;
     public override string DefaultUsername => "sa";
     public override string DefaultDatabase => "master";

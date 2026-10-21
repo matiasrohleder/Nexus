@@ -6,4 +6,7 @@ namespace Nexus.ViewModels;
 public abstract partial class DocumentViewModel : ViewModelBase
 {
     [ObservableProperty] private string _title = "";
+
+    /// <summary>Line-icon key shown in the tab header (see <see cref="Controls.Icon"/>).</summary>
+    public abstract string Icon { get; }
 }
