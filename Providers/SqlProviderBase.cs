@@ -33,6 +33,36 @@ public abstract class SqlProviderBase : IDatabaseProvider
     /// <summary>Creates an unopened driver connection for the saved profile (password decrypted here).</summary>
     protected abstract DbConnection CreateConnection(SavedConnection c);
 
+    /// <summary>Opens a connection for real work and records it, so Disconnect knows which pools to close.</summary>
+    protected async Task<DbConnection> OpenAsync(SavedConnection c, CancellationToken ct)
+    {
+        var conn = CreateConnection(c);
+        try
+        {
+            await conn.OpenAsync(ct);
+        }
+        catch
+        {
+            await conn.DisposeAsync();
+            throw;
+        }
+        ConnectionStatus.MarkOpened(c);
+        return conn;
+    }
+
+    /// <summary>Closes the driver's pooled connections for this connection string. No-op for unpooled drivers.</summary>
+    protected virtual void ClearPool(DbConnection connection) { }
+
+    public virtual Task DisconnectAsync(SavedConnection c)
+    {
+        foreach (var profile in ConnectionStatus.Forget(c.Id))
+        {
+            using var conn = CreateConnection(profile);
+            try { ClearPool(conn); } catch { /* best effort: pool may already be gone */ }
+        }
+        return Task.CompletedTask;
+    }
+
     public abstract string QuoteIdent(string ident);
     public abstract string BuildSelectQuery(string container, string obj, int limit, IReadOnlyList<ColumnInfo>? columns = null);
     public virtual string QuoteLiteral(string value) => Lit(value);
@@ -82,8 +112,7 @@ public abstract class SqlProviderBase : IDatabaseProvider
 
         try
         {
-            await using var conn = CreateConnection(c);
-            await conn.OpenAsync(ct);
+            await using var conn = await OpenAsync(c, ct);
 
             await using var cmd = conn.CreateCommand();
             cmd.CommandText = sql;
@@ -160,8 +189,7 @@ public abstract class SqlProviderBase : IDatabaseProvider
         if (statements.Count == 0) return 0;
 
         var sw = Stopwatch.StartNew();
-        await using var conn = CreateConnection(c);
-        await conn.OpenAsync(ct);
+        await using var conn = await OpenAsync(c, ct);
         await using var tx = await conn.BeginTransactionAsync(ct);
         try
         {
@@ -234,8 +262,7 @@ public abstract class SqlProviderBase : IDatabaseProvider
     protected async Task<List<string>> ReadStringsAsync(SavedConnection c, string sql, CancellationToken ct)
     {
         var list = new List<string>();
-        await using var conn = CreateConnection(c);
-        await conn.OpenAsync(ct);
+        await using var conn = await OpenAsync(c, ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
         await using var reader = await cmd.ExecuteReaderAsync(ct);
@@ -250,8 +277,7 @@ public abstract class SqlProviderBase : IDatabaseProvider
         CancellationToken ct, params (string name, object value)[] parameters)
     {
         var list = new List<T>();
-        await using var conn = CreateConnection(c);
-        await conn.OpenAsync(ct);
+        await using var conn = await OpenAsync(c, ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
         foreach (var (name, value) in parameters)

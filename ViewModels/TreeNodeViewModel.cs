@@ -23,6 +23,25 @@ public partial class TreeNodeViewModel : ObservableObject
     [ObservableProperty] private bool _isExpanded;
     [ObservableProperty] private bool _isLoading;
 
+    /// <summary>Connection roots: holds live server connections (see Services.ConnectionStatus).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StatusFill), nameof(StatusStroke), nameof(StatusText),
+        nameof(CanConnect), nameof(CanDisconnect))]
+    private bool _isConnected;
+
+    /// <summary>Connection roots: the last attempt to open the connection failed.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StatusFill), nameof(StatusStroke), nameof(StatusText))]
+    private bool _hasConnectError;
+
+    // Status dot next to the engine badge: hollow gray = disconnected, green = connected, red = failed.
+    public string StatusFill => HasConnectError ? "#F87171" : IsConnected ? "#4ADE80" : "Transparent";
+    public string StatusStroke => HasConnectError ? "#F87171" : IsConnected ? "#4ADE80" : "#6B7280";
+    public string? StatusText => !IsConnection ? null
+        : HasConnectError ? "Connection failed — right-click › Connect to retry"
+        : IsConnected ? "Connected"
+        : "Disconnected — expand to connect";
+
     public string Name { get; }
     /// <summary>Line-icon key for <see cref="Controls.Icon"/> ("table", "folder"…); empty = no icon.</summary>
     public string Icon { get; }
@@ -53,6 +72,15 @@ public partial class TreeNodeViewModel : ObservableObject
 
     public bool IsConnection => Kind == NodeKind.Connection;
     public bool IsQueryable => Kind is NodeKind.Table or NodeKind.View;
+
+    // Context-menu visibility per node kind (the explorer menu binds to these on the selected node).
+    public bool IsTable => Kind == NodeKind.Table;
+    public bool CanOpenQuery => Kind is NodeKind.Connection or NodeKind.Database or NodeKind.Schema;
+    public bool CanAdminServer => Kind is NodeKind.Connection or NodeKind.Database;
+    public bool CanDrop => Kind is NodeKind.Database or NodeKind.Schema or NodeKind.Table or NodeKind.View;
+    public bool HasContextMenu => Kind is not (NodeKind.Column or NodeKind.Message);
+    public bool CanConnect => IsConnection && !IsConnected;
+    public bool CanDisconnect => IsConnection && IsConnected;
 
     /// <summary>Adds a child and records this node as its parent.</summary>
     public void AddChild(TreeNodeViewModel child)

@@ -44,6 +44,8 @@ public sealed class OracleProvider : SqlProviderBase
         return new OracleConnection(csb.ConnectionString);
     }
 
+    protected override void ClearPool(DbConnection connection) => OracleConnection.ClearPool((OracleConnection)connection);
+
     public override string QuoteIdent(string ident) => $"\"{ident.Replace("\"", "\"\"")}\"";
 
     public override string BuildSelectQuery(string container, string obj, int limit, IReadOnlyList<ColumnInfo>? columns = null) =>

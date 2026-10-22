@@ -39,6 +39,8 @@ public sealed class SqliteProvider : SqlProviderBase
             Mode = SqliteOpenMode.ReadWriteCreate
         }.ConnectionString);
 
+    protected override void ClearPool(DbConnection connection) => SqliteConnection.ClearPool((SqliteConnection)connection);
+
     public override string QuoteIdent(string ident) => $"\"{ident.Replace("\"", "\"\"")}\"";
 
     public override string BuildSelectQuery(string container, string obj, int limit, IReadOnlyList<ColumnInfo>? columns = null) =>

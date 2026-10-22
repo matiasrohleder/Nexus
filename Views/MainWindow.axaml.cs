@@ -21,10 +21,12 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         DataContextChanged += OnDataContextChanged;
-        ExplorerTree.DoubleTapped += OnExplorerDoubleTapped;
+        // handledEventsToo: TreeViewItem marks double-taps handled after toggling expansion.
+        ExplorerTree.AddHandler(DoubleTappedEvent, OnExplorerDoubleTapped, RoutingStrategies.Bubble, handledEventsToo: true);
         // Right-click doesn't select a TreeViewItem by default; do it so the context menu
         // targets the node under the cursor (tunnel = runs before the menu opens).
         ExplorerTree.AddHandler(PointerPressedEvent, OnExplorerPointerPressed, RoutingStrategies.Tunnel);
+        ExplorerMenu.Opening += OnExplorerMenuOpening;
         HistoryGrid.DoubleTapped += (_, _) =>
             _vm?.OpenFromHistoryCommand.Execute(HistoryGrid.SelectedItem);
         SnippetsGrid.DoubleTapped += (_, _) =>
@@ -45,9 +47,17 @@ public partial class MainWindow : Window
     {
         if (!e.GetCurrentPoint(ExplorerTree).Properties.IsRightButtonPressed) return;
 
+        // Set the TreeView's SelectedItem itself: TreeViewItem.IsSelected no longer propagates to it
+        // (Avalonia 12), which left the menu acting on the previously selected node. Right-click on
+        // empty space clears the selection so the menu doesn't open for a stale node.
         var item = (e.Source as Visual)?.GetSelfAndVisualAncestors().OfType<TreeViewItem>().FirstOrDefault();
-        if (item is not null)
-            item.IsSelected = true;
+        ExplorerTree.SelectedItem = item?.DataContext;
+    }
+
+    private void OnExplorerMenuOpening(object? sender, CancelEventArgs e)
+    {
+        if (_vm?.SelectedNode is not { HasContextMenu: true })
+            e.Cancel = true;
     }
 
     private void OnDataContextChanged(object? sender, EventArgs e)

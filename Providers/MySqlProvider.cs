@@ -57,6 +57,8 @@ public class MySqlProvider : SqlProviderBase
         return new MySqlConnection(csb.ConnectionString);
     }
 
+    protected override void ClearPool(DbConnection connection) => MySqlConnection.ClearPool((MySqlConnection)connection);
+
     public override string QuoteIdent(string ident) => $"`{ident.Replace("`", "``")}`";
 
     public override string BuildSelectQuery(string container, string obj, int limit, IReadOnlyList<ColumnInfo>? columns = null) =>

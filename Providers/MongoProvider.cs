@@ -44,7 +44,11 @@ public sealed partial class MongoProvider : IDatabaseProvider
     [GeneratedRegex(@"^db\.(?<coll>[\w.-]+)\.(?<op>find|aggregate|count|countDocuments|insertOne|insertMany|deleteMany|updateMany)\s*\((?<args>[\s\S]*)\)\s*;?\s*$")]
     private static partial Regex ShellSyntax();
 
-    private MongoClient CreateClient(SavedConnection c)
+    /// <summary>
+    /// Clients with equal settings share one cluster (connection pool + monitors) inside the driver;
+    /// it stays open until <see cref="DisconnectAsync"/> unregisters it.
+    /// </summary>
+    private MongoClient CreateClient(SavedConnection c, bool track = true)
     {
         var settings = new MongoClientSettings
         {
@@ -56,7 +60,20 @@ public sealed partial class MongoProvider : IDatabaseProvider
         var password = ConnectionStore.GetPassword(c);
         if (!string.IsNullOrEmpty(c.Username))
             settings.Credential = MongoCredential.CreateCredential(c.Database, c.Username, password);
-        return new MongoClient(settings);
+        var client = new MongoClient(settings);
+        if (track) ConnectionStatus.MarkOpened(c);
+        return client;
+    }
+
+    public Task DisconnectAsync(SavedConnection c)
+    {
+        foreach (var profile in ConnectionStatus.Forget(c.Id))
+        {
+            // MongoClient.Dispose leaves the shared cluster running (driver 3.9); unregister it explicitly.
+            try { ClusterRegistry.Instance.UnregisterAndDisposeCluster(CreateClient(profile, track: false).Cluster); }
+            catch { /* best effort */ }
+        }
+        return Task.CompletedTask;
     }
 
     public string QuoteIdent(string ident) => ident;
@@ -69,9 +86,9 @@ public sealed partial class MongoProvider : IDatabaseProvider
 
     public async Task<(bool ok, string message)> TestConnectionAsync(SavedConnection c, CancellationToken ct = default)
     {
+        var client = CreateClient(c, track: false);
         try
         {
-            var client = CreateClient(c);
             var db = client.GetDatabase(c.Database);
             var build = await db.RunCommandAsync<BsonDocument>(new BsonDocument("buildInfo", 1), cancellationToken: ct);
             return (true, $"Connected — MongoDB {build.GetValue("version", "?")}");
@@ -79,6 +96,12 @@ public sealed partial class MongoProvider : IDatabaseProvider
         catch (Exception ex)
         {
             return (false, ex.Message);
+        }
+        finally
+        {
+            // Don't leave the probe's cluster open, unless the explorer/tabs are sharing it.
+            if (!ConnectionStatus.IsConnected(c.Id))
+                try { ClusterRegistry.Instance.UnregisterAndDisposeCluster(client.Cluster); } catch { /* best effort */ }
         }
     }
 

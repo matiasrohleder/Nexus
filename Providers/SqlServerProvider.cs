@@ -50,6 +50,8 @@ public sealed class SqlServerProvider : SqlProviderBase
         return new SqlConnection(csb.ConnectionString);
     }
 
+    protected override void ClearPool(DbConnection connection) => SqlConnection.ClearPool((SqlConnection)connection);
+
     public override string QuoteIdent(string ident) => $"[{ident.Replace("]", "]]")}]";
 
     public override string BuildSelectQuery(string container, string obj, int limit, IReadOnlyList<ColumnInfo>? columns = null) =>

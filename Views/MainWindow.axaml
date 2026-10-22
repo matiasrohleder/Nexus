@@ -115,45 +115,79 @@
                         </Button>
                     </StackPanel>
 
+                    <!-- Hidden while empty: a transparent TreeView still hit-tests and would swallow
+                         clicks on the first-run hint's buttons underneath. -->
                     <TreeView Grid.Row="1" Name="ExplorerTree"
                               x:CompileBindings="False"
+                              IsVisible="{Binding HasConnections}"
                               ItemsSource="{Binding ConnectionNodes}"
-                              SelectedItem="{Binding SelectedNode}"
+                              SelectedItem="{Binding SelectedNode, Mode=TwoWay}"
                               Background="Transparent" Padding="0 4">
+                        <!-- Items show per node kind (flags on SelectedNode); the right-click handler
+                             selects the node under the cursor before the menu opens. -->
                         <TreeView.ContextMenu>
-                            <ContextMenu>
+                            <ContextMenu Name="ExplorerMenu">
+                                <MenuItem Header="Connect" Command="{Binding ConnectCommand}"
+                                          CommandParameter="{Binding SelectedNode}"
+                                          IsVisible="{Binding SelectedNode.CanConnect}">
+                                    <MenuItem.Icon><c:Icon Kind="link" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="Disconnect" Command="{Binding DisconnectCommand}"
+                                          CommandParameter="{Binding SelectedNode}"
+                                          IsVisible="{Binding SelectedNode.CanDisconnect}">
+                                    <MenuItem.Icon><c:Icon Kind="unlink" /></MenuItem.Icon>
+                                </MenuItem>
                                 <MenuItem Header="View Data (top 100)" Command="{Binding OpenTableCommand}"
-                                          CommandParameter="{Binding SelectedNode}">
+                                          CommandParameter="{Binding SelectedNode}"
+                                          IsVisible="{Binding SelectedNode.IsQueryable}">
                                     <MenuItem.Icon><c:Icon Kind="search" /></MenuItem.Icon>
                                 </MenuItem>
                                 <MenuItem Header="Edit Data" Command="{Binding EditTableDataCommand}"
-                                          CommandParameter="{Binding SelectedNode}">
+                                          CommandParameter="{Binding SelectedNode}"
+                                          IsVisible="{Binding SelectedNode.IsTable}">
                                     <MenuItem.Icon><c:Icon Kind="edit" /></MenuItem.Icon>
                                 </MenuItem>
                                 <MenuItem Header="View DDL" Command="{Binding ViewDdlCommand}"
-                                          CommandParameter="{Binding SelectedNode}">
+                                          CommandParameter="{Binding SelectedNode}"
+                                          IsVisible="{Binding SelectedNode.IsQueryable}">
                                     <MenuItem.Icon><c:Icon Kind="code" /></MenuItem.Icon>
                                 </MenuItem>
                                 <MenuItem Header="Import CSV…" Command="{Binding ImportCsvCommand}"
-                                          CommandParameter="{Binding SelectedNode}">
+                                          CommandParameter="{Binding SelectedNode}"
+                                          IsVisible="{Binding SelectedNode.IsTable}">
                                     <MenuItem.Icon><c:Icon Kind="import" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="New Query" Command="{Binding NewQueryCommand}"
+                                          IsVisible="{Binding SelectedNode.CanOpenQuery}">
+                                    <MenuItem.Icon><c:Icon Kind="query" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="Edit Connection…" Command="{Binding EditConnectionCommand}"
+                                          IsVisible="{Binding SelectedNode.IsConnection}">
+                                    <MenuItem.Icon><c:Icon Kind="edit" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="Server Administration" Command="{Binding OpenServerAdminCommand}"
+                                          CommandParameter="{Binding SelectedNode}"
+                                          IsVisible="{Binding SelectedNode.CanAdminServer}">
+                                    <MenuItem.Icon><c:Icon Kind="server" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="Refresh" Command="{Binding RefreshNodeCommand}"
+                                          CommandParameter="{Binding SelectedNode}">
+                                    <MenuItem.Icon><c:Icon Kind="refresh" /></MenuItem.Icon>
                                 </MenuItem>
                                 <Separator />
                                 <MenuItem Header="Truncate Table…" Command="{Binding TruncateTableCommand}"
-                                          CommandParameter="{Binding SelectedNode}">
+                                          CommandParameter="{Binding SelectedNode}"
+                                          IsVisible="{Binding SelectedNode.IsTable}">
                                     <MenuItem.Icon><c:Icon Kind="warning" Foreground="#FBBF24" /></MenuItem.Icon>
                                 </MenuItem>
                                 <MenuItem Header="Drop…" Command="{Binding DropObjectCommand}"
-                                          CommandParameter="{Binding SelectedNode}">
+                                          CommandParameter="{Binding SelectedNode}"
+                                          IsVisible="{Binding SelectedNode.CanDrop}">
                                     <MenuItem.Icon><c:Icon Kind="trash" Foreground="#F87171" /></MenuItem.Icon>
                                 </MenuItem>
-                                <Separator />
-                                <MenuItem Header="Server Administration" Command="{Binding OpenServerAdminCommand}"
-                                          CommandParameter="{Binding SelectedNode}">
-                                    <MenuItem.Icon><c:Icon Kind="server" /></MenuItem.Icon>
-                                </MenuItem>
-                                <MenuItem Header="Refresh" Command="{Binding RefreshConnectionCommand}">
-                                    <MenuItem.Icon><c:Icon Kind="refresh" /></MenuItem.Icon>
+                                <MenuItem Header="Remove Connection…" Command="{Binding RemoveConnectionCommand}"
+                                          IsVisible="{Binding SelectedNode.IsConnection}">
+                                    <MenuItem.Icon><c:Icon Kind="trash" Foreground="#F87171" /></MenuItem.Icon>
                                 </MenuItem>
                             </ContextMenu>
                         </TreeView.ContextMenu>
@@ -165,7 +199,8 @@
                         </TreeView.Styles>
                         <TreeView.ItemTemplate>
                             <TreeDataTemplate ItemsSource="{Binding Children}" x:DataType="vm:TreeNodeViewModel">
-                                <StackPanel Orientation="Horizontal" Spacing="7" Margin="0 2">
+                                <StackPanel Orientation="Horizontal" Spacing="7" Margin="0 2"
+                                            Background="Transparent" ToolTip.Tip="{Binding StatusText}">
                                     <Border IsVisible="{Binding HasBadge}" Width="3" Height="16" CornerRadius="1.5"
                                             Background="{Binding AccentColor}" VerticalAlignment="Center" />
                                     <Border IsVisible="{Binding HasBadge}" Classes="badge" Background="{Binding BadgeColor}">
@@ -174,6 +209,10 @@
                                     <c:Icon IsVisible="{Binding HasIcon}" Kind="{Binding Icon}" Foreground="{Binding IconColor}"
                                             Size="15" StrokeThickness="1.8" VerticalAlignment="Center" />
                                     <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+                                    <!-- Connection state: hollow gray = disconnected, green = connected, red = failed -->
+                                    <Ellipse IsVisible="{Binding HasBadge}" Width="8" Height="8" StrokeThickness="1.5"
+                                             Fill="{Binding StatusFill}" Stroke="{Binding StatusStroke}"
+                                             VerticalAlignment="Center" />
                                     <TextBlock Text="{Binding Detail}" IsVisible="{Binding HasDetail}" FontSize="12"
                                                Opacity="0.45" VerticalAlignment="Center" />
                                     <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsLoading}"

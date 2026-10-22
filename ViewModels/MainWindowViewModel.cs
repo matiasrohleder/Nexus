@@ -68,7 +68,25 @@ public partial class MainWindowViewModel : ViewModelBase
             ConnectionNodes.Add(BuildConnectionNode(c));
         }
         SyncProfilerConnections();
+
+        // Providers report opens/closes from worker threads (tree, query tabs, admin panel…).
+        ConnectionStatus.Changed += id => Avalonia.Threading.Dispatcher.UIThread.Post(() => SyncConnectionStatus(id));
     }
+
+    private void SyncConnectionStatus(Guid id)
+    {
+        foreach (var root in ConnectionNodes.Where(n => n.Connection?.Id == id))
+        {
+            root.IsConnected = ConnectionStatus.IsConnected(id);
+            if (root.IsConnected) root.HasConnectError = false;
+        }
+    }
+
+    /// <summary>The connection root a node belongs to (children may hold database-pinned clones).</summary>
+    private TreeNodeViewModel? RootOf(TreeNodeViewModel? node) =>
+        node is { IsConnection: true }
+            ? node
+            : ConnectionNodes.FirstOrDefault(n => n.Connection?.Id == node?.Connection?.Id);
 
     // ---- Object explorer node factory --------------------------------------------------
 
@@ -80,12 +98,29 @@ public partial class MainWindowViewModel : ViewModelBase
             Connection = c,
             Badge = provider.Badge,
             BadgeColor = provider.BrandColor,
-            AccentColor = c.Color
+            AccentColor = c.Color,
+            IsConnected = ConnectionStatus.IsConnected(c.Id)
         };
         return node;
     }
 
+    /// <summary>Expanding a connection root is what connects it; a failure marks it red and closes what opened.</summary>
     private async Task LoadContainersAsync(TreeNodeViewModel node)
+    {
+        try
+        {
+            await LoadServerLevelAsync(node);
+            node.HasConnectError = false;
+        }
+        catch
+        {
+            node.HasConnectError = true;
+            await ProviderRegistry.For(node.Connection!).DisconnectAsync(node.Connection!);
+            throw;
+        }
+    }
+
+    private async Task LoadServerLevelAsync(TreeNodeViewModel node)
     {
         var provider = ProviderRegistry.For(node.Connection!);
 
@@ -205,6 +240,8 @@ public partial class MainWindowViewModel : ViewModelBase
         var vm = new ConnectionEditorViewModel(connection);
         if (await ShowConnectionEditor(vm))
         {
+            // Settings may have changed: close connections opened with the old ones.
+            await ProviderRegistry.For(connection).DisconnectAsync(connection);
             var updated = vm.Commit();
             var index = Connections.IndexOf(connection);
             if (index >= 0)
@@ -231,6 +268,7 @@ public partial class MainWindowViewModel : ViewModelBase
                 $"Its saved password is deleted from {SecretStore.LocationName}. The database itself is not touched."))
             return;
 
+        await ProviderRegistry.For(connection).DisconnectAsync(connection);
         Connections.RemoveAt(index);
         ConnectionNodes.RemoveAt(index);
         ConnectionStore.ForgetPassword(connection);
@@ -339,17 +377,58 @@ public partial class MainWindowViewModel : ViewModelBase
         _settings.Save();
     }
 
+    /// <summary>Opens the connection by expanding its root (or reloading it after a failed attempt).</summary>
+    [RelayCommand]
+    private void Connect(TreeNodeViewModel? node)
+    {
+        var root = RootOf(node ?? SelectedNode);
+        if (root is null) return;
+        if (root.IsExpanded)
+            _ = root.ReloadAsync();
+        else
+            root.IsExpanded = true;
+    }
+
+    /// <summary>
+    /// Collapses the connection's tree and closes every live server connection Nexus holds for it.
+    /// Open query tabs stay; running one simply reconnects.
+    /// </summary>
+    [RelayCommand]
+    private async Task DisconnectAsync(TreeNodeViewModel? node)
+    {
+        var root = RootOf(node ?? SelectedNode);
+        if (root?.Connection is null) return;
+
+        if (SelectedNode is not null && SelectedNode.Connection?.Id == root.Connection.Id)
+            SelectedNode = root;
+        root.Invalidate();
+        root.HasConnectError = false;
+        Services.SchemaCache.Invalidate(root.Connection.Id);
+        await ProviderRegistry.For(root.Connection).DisconnectAsync(root.Connection);
+    }
+
     [RelayCommand]
     private void RefreshConnection()
     {
-        var node = SelectedNode;
-        // Walk up to the connection root if a child is selected (children may hold pinned clones).
-        var root = node is { IsConnection: true }
-            ? node
-            : ConnectionNodes.FirstOrDefault(n => n.Connection?.Id == node?.Connection?.Id);
+        var root = RootOf(SelectedNode);
         root?.Invalidate();
         if (root?.Connection is not null)
             Services.SchemaCache.Invalidate(root.Connection.Id);
+    }
+
+    /// <summary>Context-menu Refresh: reloads that node in place (connection roots refresh as a whole).</summary>
+    [RelayCommand]
+    private async Task RefreshNodeAsync(TreeNodeViewModel? node)
+    {
+        node ??= SelectedNode;
+        if (node is null || node.IsConnection)
+        {
+            RefreshConnection();
+            return;
+        }
+        if (node.Connection is not null)
+            Services.SchemaCache.Invalidate(node.Connection.Id);
+        await node.ReloadAsync();
     }
 
     // ---- Query commands ----------------------------------------------------------------

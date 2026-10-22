@@ -52,6 +52,8 @@ public sealed class PostgresProvider : SqlProviderBase
         return new NpgsqlConnection(csb.ConnectionString);
     }
 
+    protected override void ClearPool(DbConnection connection) => NpgsqlConnection.ClearPool((NpgsqlConnection)connection);
+
     public override string QuoteIdent(string ident) => $"\"{ident.Replace("\"", "\"\"")}\"";
 
     public override string BuildSelectQuery(string container, string obj, int limit, IReadOnlyList<ColumnInfo>? columns = null) =>
