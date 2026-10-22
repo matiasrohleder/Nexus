@@ -38,7 +38,7 @@
                             <DataGridTextColumn Header="Database" Binding="{Binding Database}" Width="Auto" />
                             <DataGridTextColumn Header="State" Binding="{Binding State}" Width="Auto" />
                             <DataGridTextColumn Header="Duration (ms)" Binding="{Binding DurationMs}" Width="Auto" />
-                            <DataGridTextColumn Header="Query" Binding="{Binding Query}" Width="*" />
+                            <DataGridTextColumn Header="Query" Binding="{Binding QueryPreview}" Width="*" />
                         </DataGrid.Columns>
                     </DataGrid>
                 </Grid>

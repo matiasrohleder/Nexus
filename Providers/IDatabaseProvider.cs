@@ -33,7 +33,11 @@ public sealed record DbObjectInfo(string Name, DbObjectKind Kind);
 
 public sealed record ColumnInfo(string Name, string DataType, bool Nullable, bool IsPrimaryKey = false);
 
-public sealed record SessionInfo(string Id, string? User, string? Database, string? State, string? Query, double? DurationMs);
+public sealed record SessionInfo(string Id, string? User, string? Database, string? State, string? Query, double? DurationMs)
+{
+    /// <summary>Query collapsed to one line so multi-line SQL doesn't blow up the sessions grid's row height.</summary>
+    public string? QueryPreview => Query is null ? null : System.Text.RegularExpressions.Regex.Replace(Query, @"\s+", " ").Trim();
+}
 
 public sealed record UserInfo(string Name, bool IsAdmin, string? Details);
 
@@ -51,8 +55,7 @@ public interface IDatabaseProvider
     // ---- identity / connection-dialog metadata ----
     string Id { get; }               // "postgresql"
     string DisplayName { get; }      // "PostgreSQL"
-    string Badge { get; }            // two-letter tile/tree badge ("Pg")
-    string BrandColor { get; }       // badge background (hex)
+    string BrandColor { get; }       // official brand color (hex): logo tile background, see Controls/EngineLogo
     int DefaultPort { get; }
     string DefaultUsername { get; }
     string DefaultDatabase { get; }
@@ -60,6 +63,13 @@ public interface IDatabaseProvider
 
     // ---- core ----
     Task<(bool ok, string message)> TestConnectionAsync(SavedConnection c, CancellationToken ct = default);
+
+    /// <summary>
+    /// Closes every live server connection Nexus holds for this saved connection (pools of the
+    /// profile and its database-pinned clones; see <see cref="Services.ConnectionStatus"/>).
+    /// The next operation simply reconnects.
+    /// </summary>
+    Task DisconnectAsync(SavedConnection c);
 
     /// <summary>Executes a script/command batch. For SQL engines: SQL text. Always logs to the profiler.</summary>
     Task<List<QueryResult>> ExecuteAsync(SavedConnection c, string sql, CancellationToken ct = default);

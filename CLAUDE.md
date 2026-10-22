@@ -117,6 +117,16 @@ driver. Key ideas that span multiple files:
   `ConnectionStore.SaveAll` commits it to the keyring; `GetPassword` = pending ?? keyring.
   Removing a connection calls `ForgetPassword`. Pre-0.2 `EncryptedPassword` blobs
   (`LegacyEncryptedPassword` + `key.bin`) are migrated into the keyring on `Load`.
+  On Linux use libsecret's `secret_service_*` calls, never `secret_password_*`: the latter
+  silently writes to a private file when `SNAP_NAME` is set (e.g. launched from the VS Code
+  snap's terminal), so passwords saved there were invisible to a desktop launch.
+- **Connection lifecycle**: nothing connects at startup; expanding a connection root connects it.
+  Providers report every profile they actually open to `ConnectionStatus` (SQL engines via
+  `SqlProviderBase.OpenAsync` — use it, not `CreateConnection`+`OpenAsync`, for real work;
+  `TestConnectionAsync` stays untracked). `IDatabaseProvider.DisconnectAsync` closes them all
+  (driver `ClearPool` per opened profile incl. pinned clones; Mongo unregisters its cluster —
+  `MongoClient.Dispose` doesn't). The tree shows a status dot per connection
+  (`TreeNodeViewModel.IsConnected`/`HasConnectError`), synced from `ConnectionStatus.Changed`.
 - `SavedConnection` equality is by `Id`, so database-pinned clones match their profile in
   pickers and `IndexOf`.
 - **Singletons**: `QueryProfiler.Instance` (all query logging; UI-thread marshalled unless
@@ -130,14 +140,22 @@ driver. Key ideas that span multiple files:
 - AvaloniaEdit consumes Enter before window KeyBindings — Ctrl+Enter is intercepted with a
   **tunnel** handler on the editor (`QueryDocumentView`). Same technique selects tree nodes on
   right-click (`MainWindow.OnExplorerPointerPressed`) because Avalonia doesn't select on
-  right-click by itself.
+  right-click by itself. Set `TreeView.SelectedItem` there — `TreeViewItem.IsSelected = true` no
+  longer propagates to it in Avalonia 12 (the context menu then acted on a stale node).
+- The explorer context menu shows items per node kind via flags on `TreeNodeViewModel`
+  (`IsQueryable`, `IsTable`, `CanDrop`, `CanOpenQuery`…); add new actions the same way.
+- Don't put `Padding` on a `ScrollViewer`: it isn't subtracted when measuring the content, so
+  wide children overflow. Use a `Margin` on the content instead.
+- A transparent `Background` still hit-tests: an empty control layered over another (e.g. the
+  TreeView over the first-run hint) swallows its clicks — hide it instead.
 - Results/data grids build `DataGridTextColumn`s in code-behind with reflection bindings to a
   string indexer (`Binding("[i]")`) because the schema is only known at runtime.
 - Package name quirk: the editor package is `Avalonia.AvaloniaEdit` (theme at
   `avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml`); DataGrid version lags core Avalonia.
 - **No emoji in the UI** — emoji fonts differ per OS and are missing on many Linux installs
   (they render as tofu). Use `Controls/Icon` (`<c:Icon Kind="table" />`, stroked 24×24 paths;
-  add new kinds to its `Paths` table). Engines show a two-letter `Badge` on their `BrandColor`.
+  add new kinds to its `Paths` table). Engines show their real logo via `Controls/EngineLogo`
+  (filled Simple Icons paths, CC0, keyed by provider `Id`) on a tile of the official `BrandColor`.
 - Monospace text uses the bundled JetBrains Mono via `{StaticResource MonoFont}` (App.axaml).
 - Two-way `ComboBox.SelectedItem` bindings push `null` while a tab's view re-binds; bind to a
   null-ignoring proxy (`QueryDocumentViewModel.ConnectionChoice`/`DatabaseChoice`).
@@ -154,7 +172,7 @@ and inject into the VM.
 
 ## Versioning
 
-Semantic versioning starting at **0.1.0** (0.2.0 = OS keyring + installers). The single source of truth is `<Version>` in
+Semantic versioning starting at **0.1.0** (0.2.0 = OS keyring + installers; 0.3.0 = connect/disconnect + explorer fixes). The single source of truth is `<Version>` in
 `Nexus.csproj`; `Services/AppInfo.cs` reads it from the assembly at runtime and the top bar
 renders it as "Nexus — {version}" (`MainWindowViewModel.VersionText`); the packaging scripts
 read it from the csproj too. To release: bump `<Version>`, commit, push tag `v<Version>`.
@@ -167,6 +185,8 @@ Don't hardcode the version anywhere else.
   user-toggleable (⋯ menu) and persisted.
 - Removing a connection asks for confirmation (it also deletes the keyring entry).
 - New query tabs start **empty**; the **profiler starts off** (opt-in).
+- Connections **start disconnected** and connect only when the user expands them; right-click
+  offers Connect/Disconnect, and a dot shows the state (gray hollow / green / red).
 - "View Data" generates an **explicit, line-broken column list** (one column per line, dialect
   LIMIT/TOP/FETCH), falling back to `*` only if introspection fails.
 - Query errors must be loud: red selectable banner above results + Messages tab + status.

@@ -13,8 +13,7 @@ public sealed class OracleProvider : SqlProviderBase
 {
     public override string Id => "oracle";
     public override string DisplayName => "Oracle";
-    public override string Badge => "Or";
-    public override string BrandColor => "#C2410C";
+    public override string BrandColor => "#F80000";
     public override int DefaultPort => 1521;
     public override string DefaultUsername => "system";
     public override string DefaultDatabase => "FREEPDB1";
@@ -43,6 +42,8 @@ public sealed class OracleProvider : SqlProviderBase
         };
         return new OracleConnection(csb.ConnectionString);
     }
+
+    protected override void ClearPool(DbConnection connection) => OracleConnection.ClearPool((OracleConnection)connection);
 
     public override string QuoteIdent(string ident) => $"\"{ident.Replace("\"", "\"\"")}\"";
 

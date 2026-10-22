@@ -12,8 +12,7 @@ public sealed class DuckDbProvider : SqlProviderBase
 {
     public override string Id => "duckdb";
     public override string DisplayName => "DuckDB";
-    public override string Badge => "Dk";
-    public override string BrandColor => "#D97706";
+    public override string BrandColor => "#FFF000";
     public override int DefaultPort => 0;
     public override string DefaultUsername => "";
     public override string DefaultDatabase => "main";

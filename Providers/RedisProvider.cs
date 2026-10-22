@@ -19,8 +19,7 @@ public sealed class RedisProvider : IDatabaseProvider
 {
     public string Id => "redis";
     public string DisplayName => "Redis";
-    public string Badge => "Rd";
-    public string BrandColor => "#DC2626";
+    public string BrandColor => "#FF4438";
     public int DefaultPort => 6379;
     public string DefaultUsername => "";
     public string DefaultDatabase => "0";
@@ -39,7 +38,8 @@ public sealed class RedisProvider : IDatabaseProvider
 
     private const int ScanSampleLimit = 500;
 
-    private async Task<ConnectionMultiplexer> ConnectAsync(SavedConnection c)
+    /// <summary>Opens a multiplexer for one operation (callers dispose it), so nothing stays open between calls.</summary>
+    private async Task<ConnectionMultiplexer> ConnectAsync(SavedConnection c, bool track = true)
     {
         var options = new ConfigurationOptions
         {
@@ -51,7 +51,16 @@ public sealed class RedisProvider : IDatabaseProvider
         var password = ConnectionStore.GetPassword(c);
         if (!string.IsNullOrEmpty(password)) options.Password = password;
         if (!string.IsNullOrEmpty(c.Username)) options.User = c.Username;
-        return await ConnectionMultiplexer.ConnectAsync(options);
+        var mux = await ConnectionMultiplexer.ConnectAsync(options);
+        if (track) ConnectionStatus.MarkOpened(c);
+        return mux;
+    }
+
+    /// <summary>Connections are per call, so disconnecting only resets the status.</summary>
+    public Task DisconnectAsync(SavedConnection c)
+    {
+        ConnectionStatus.Forget(c.Id);
+        return Task.CompletedTask;
     }
 
     /// <summary>Accepts both "3" and "db3" (the explorer/picker use the db-prefixed form).</summary>
@@ -68,7 +77,7 @@ public sealed class RedisProvider : IDatabaseProvider
     {
         try
         {
-            using var mux = await ConnectAsync(c);
+            using var mux = await ConnectAsync(c, track: false);
             var server = mux.GetServer(mux.GetEndPoints()[0]);
             var info = await server.InfoAsync("server");
             var version = info.SelectMany(g => g).FirstOrDefault(kv => kv.Key == "redis_version").Value ?? "?";

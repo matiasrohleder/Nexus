@@ -47,10 +47,20 @@ public partial class ConnectionEditorViewModel : ViewModelBase
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasTestMessage))]
     private string _testMessage = string.Empty;
-    [ObservableProperty] private bool _testSucceeded;
-    [ObservableProperty] private bool _isBusy;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TestIcon))]
+    [NotifyPropertyChangedFor(nameof(TestColor))]
+    private bool _testSucceeded;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TestIcon))]
+    [NotifyPropertyChangedFor(nameof(TestColor))]
+    private bool _isBusy;
 
     public bool HasTestMessage => !string.IsNullOrEmpty(TestMessage);
+
+    /// <summary>Result banner styling: neutral while connecting, green on success, red on failure.</summary>
+    public string TestIcon => IsBusy ? "clock" : TestSucceeded ? "check" : "error";
+    public string TestColor => IsBusy ? "#9CA3AF" : TestSucceeded ? "#4EC977" : "#F48771";
 
     public string DialogTitle { get; }
 

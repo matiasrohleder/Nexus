@@ -77,21 +77,6 @@
             <Setter Property="Foreground" Value="White" />
         </Style>
 
-        <!-- Engine badge ("Pg", "My"…) used in the tree and connection dialog -->
-        <Style Selector="Border.badge">
-            <Setter Property="CornerRadius" Value="4" />
-            <Setter Property="MinWidth" Value="22" />
-            <Setter Property="Height" Value="18" />
-            <Setter Property="Padding" Value="3 0" />
-            <Setter Property="VerticalAlignment" Value="Center" />
-        </Style>
-        <Style Selector="Border.badge > TextBlock">
-            <Setter Property="FontSize" Value="10" />
-            <Setter Property="FontWeight" Value="Bold" />
-            <Setter Property="Foreground" Value="White" />
-            <Setter Property="HorizontalAlignment" Value="Center" />
-            <Setter Property="VerticalAlignment" Value="Center" />
-        </Style>
 
         <!-- Tabs: Fluent's default header is 24pt; IDE tabs are compact -->
         <Style Selector="TabItem">

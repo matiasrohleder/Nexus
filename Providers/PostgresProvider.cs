@@ -14,8 +14,7 @@ public sealed class PostgresProvider : SqlProviderBase
 {
     public override string Id => "postgresql";
     public override string DisplayName => "PostgreSQL";
-    public override string Badge => "Pg";
-    public override string BrandColor => "#336791";
+    public override string BrandColor => "#4169E1";
     public override int DefaultPort => 5432;
     public override string DefaultUsername => "postgres";
     public override string DefaultDatabase => "postgres";
@@ -51,6 +50,8 @@ public sealed class PostgresProvider : SqlProviderBase
         };
         return new NpgsqlConnection(csb.ConnectionString);
     }
+
+    protected override void ClearPool(DbConnection connection) => NpgsqlConnection.ClearPool((NpgsqlConnection)connection);
 
     public override string QuoteIdent(string ident) => $"\"{ident.Replace("\"", "\"\"")}\"";
 

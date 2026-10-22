@@ -221,9 +221,16 @@ internal sealed class MacKeychainBackend : ISecretBackend
 
 /// <summary>
 /// Linux Secret Service (GNOME Keyring, KWallet ≥ 5.97, KeePassXC…) through libsecret's
-/// non-variadic *v_sync API. Items carry the schema "app.nexus.Connection" and the attribute
+/// non-variadic SecretService API. Items carry the schema "app.nexus.Connection" and the attribute
 /// connection=&lt;id&gt;, and show up as "Nexus — &lt;name&gt;" in Seahorse / KWalletManager.
 /// </summary>
+/// <remarks>
+/// Deliberately not the secret_password_* API: since libsecret 0.21 it silently switches to a
+/// private file (~/.local/share/keyrings/default.keyring) whenever SNAP_NAME is set or
+/// /.flatpak-info exists, which happens when Nexus is started from a snap/flatpak app such as
+/// VS Code's terminal. Passwords saved from one launch were then invisible from the other.
+/// Reads still fall back to that API so passwords saved there aren't lost.
+/// </remarks>
 [SupportedOSPlatform("linux")]
 internal sealed class LinuxSecretServiceBackend : ISecretBackend
 {
@@ -244,10 +251,28 @@ internal sealed class LinuxSecretServiceBackend : ISecretBackend
     [DllImport(LibGlib)] private static extern void g_hash_table_unref(IntPtr table);
     [DllImport(LibGlib)] private static extern void g_error_free(IntPtr error);
 
-    [DllImport(LibSecret)]
-    private static extern int secret_password_storev_sync(IntPtr schema, IntPtr attributes, IntPtr collection,
-        IntPtr label, IntPtr password, IntPtr cancellable, out IntPtr error);
+    private const int ServiceOpenSession = 1 << 1; // SECRET_SERVICE_OPEN_SESSION
 
+    [DllImport(LibSecret)]
+    private static extern IntPtr secret_service_get_sync(int flags, IntPtr cancellable, out IntPtr error);
+
+    [DllImport(LibSecret)]
+    private static extern IntPtr secret_service_lookup_sync(IntPtr service, IntPtr schema, IntPtr attributes,
+        IntPtr cancellable, out IntPtr error);
+
+    [DllImport(LibSecret)]
+    private static extern int secret_service_store_sync(IntPtr service, IntPtr schema, IntPtr attributes,
+        IntPtr collection, IntPtr label, IntPtr value, IntPtr cancellable, out IntPtr error);
+
+    [DllImport(LibSecret)]
+    private static extern int secret_service_clear_sync(IntPtr service, IntPtr schema, IntPtr attributes,
+        IntPtr cancellable, out IntPtr error);
+
+    [DllImport(LibSecret)] private static extern IntPtr secret_value_new(IntPtr secret, nint length, IntPtr contentType);
+    [DllImport(LibSecret)] private static extern IntPtr secret_value_get_text(IntPtr value);
+    [DllImport(LibSecret)] private static extern void secret_value_unref(IntPtr value);
+
+    // Backend-dispatching API (see remarks): only used to read/clear entries it may have put in its file.
     [DllImport(LibSecret)]
     private static extern IntPtr secret_password_lookupv_sync(IntPtr schema, IntPtr attributes,
         IntPtr cancellable, out IntPtr error);
@@ -258,6 +283,7 @@ internal sealed class LinuxSecretServiceBackend : ISecretBackend
 
     [DllImport(LibSecret)] private static extern void secret_password_free(IntPtr password);
 
+    private readonly IntPtr _service;
     private readonly IntPtr _schema;
     private readonly IntPtr _strHash;
     private readonly IntPtr _strEqual;
@@ -268,6 +294,9 @@ internal sealed class LinuxSecretServiceBackend : ISecretBackend
         _strHash = NativeLibrary.GetExport(glib, "g_str_hash");
         _strEqual = NativeLibrary.GetExport(glib, "g_str_equal");
         _schema = BuildSchema();
+        // Process-lifetime reference to the shared D-Bus proxy; throws when no service answers.
+        _service = secret_service_get_sync(ServiceOpenSession, IntPtr.Zero, out var error);
+        ThrowIfError(error);
     }
 
     public string Name => "system keyring (Secret Service)";
@@ -328,11 +357,24 @@ internal sealed class LinuxSecretServiceBackend : ISecretBackend
         var table = Attributes(id, out var k, out var v);
         try
         {
-            var result = secret_password_lookupv_sync(_schema, table, IntPtr.Zero, out var error);
+            var value = secret_service_lookup_sync(_service, _schema, table, IntPtr.Zero, out var error);
             ThrowIfError(error);
-            if (result == IntPtr.Zero) return null;
-            var text = Marshal.PtrToStringUTF8(result);
-            secret_password_free(result); // wipes the buffer
+            if (value != IntPtr.Zero)
+            {
+                try { return Marshal.PtrToStringUTF8(secret_value_get_text(value)); }
+                finally { secret_value_unref(value); } // wipes the buffer
+            }
+
+            // Not in the keyring: maybe saved while libsecret was using its file backend.
+            var legacy = secret_password_lookupv_sync(_schema, table, IntPtr.Zero, out error);
+            if (error != IntPtr.Zero)
+            {
+                g_error_free(error);
+                return null;
+            }
+            if (legacy == IntPtr.Zero) return null;
+            var text = Marshal.PtrToStringUTF8(legacy);
+            secret_password_free(legacy);
             return text;
         }
         finally
@@ -349,18 +391,29 @@ internal sealed class LinuxSecretServiceBackend : ISecretBackend
         var labelPtr = Marshal.StringToCoTaskMemUTF8($"Nexus — {label}");
         var bytes = Encoding.UTF8.GetBytes(password);
         var pwPtr = Marshal.AllocCoTaskMem(bytes.Length + 1);
+        var contentType = Marshal.StringToCoTaskMemUTF8("text/plain");
         try
         {
             Marshal.Copy(bytes, 0, pwPtr, bytes.Length);
             Marshal.WriteByte(pwPtr, bytes.Length, 0);
-            secret_password_storev_sync(_schema, table, IntPtr.Zero, labelPtr, pwPtr, IntPtr.Zero, out var error);
-            ThrowIfError(error);
+            // secret_value_new copies into libsecret's secure memory; null collection = default keyring.
+            var value = secret_value_new(pwPtr, bytes.Length, contentType);
+            try
+            {
+                secret_service_store_sync(_service, _schema, table, IntPtr.Zero, labelPtr, value, IntPtr.Zero, out var error);
+                ThrowIfError(error);
+            }
+            finally
+            {
+                secret_value_unref(value);
+            }
         }
         finally
         {
             for (var i = 0; i < bytes.Length; i++) Marshal.WriteByte(pwPtr, i, 0);
             CryptographicOperations.ZeroMemory(bytes);
             Marshal.FreeCoTaskMem(pwPtr);
+            Marshal.FreeCoTaskMem(contentType);
             Marshal.FreeCoTaskMem(labelPtr);
             g_hash_table_unref(table);
             Marshal.FreeCoTaskMem(k);
@@ -373,8 +426,11 @@ internal sealed class LinuxSecretServiceBackend : ISecretBackend
         var table = Attributes(id, out var k, out var v);
         try
         {
-            secret_password_clearv_sync(_schema, table, IntPtr.Zero, out var error);
+            secret_service_clear_sync(_service, _schema, table, IntPtr.Zero, out var error);
             ThrowIfError(error);
+            // Also drop a copy the backend-dispatching API may hold in its file (see remarks).
+            secret_password_clearv_sync(_schema, table, IntPtr.Zero, out error);
+            if (error != IntPtr.Zero) g_error_free(error);
         }
         finally
         {

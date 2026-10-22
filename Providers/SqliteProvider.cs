@@ -12,8 +12,7 @@ public sealed class SqliteProvider : SqlProviderBase
 {
     public override string Id => "sqlite";
     public override string DisplayName => "SQLite";
-    public override string Badge => "SL";
-    public override string BrandColor => "#0369A1";
+    public override string BrandColor => "#003B57";
     public override int DefaultPort => 0;
     public override string DefaultUsername => "";
     public override string DefaultDatabase => "main";
@@ -38,6 +37,8 @@ public sealed class SqliteProvider : SqlProviderBase
             DataSource = c.FilePath,
             Mode = SqliteOpenMode.ReadWriteCreate
         }.ConnectionString);
+
+    protected override void ClearPool(DbConnection connection) => SqliteConnection.ClearPool((SqliteConnection)connection);
 
     public override string QuoteIdent(string ident) => $"\"{ident.Replace("\"", "\"\"")}\"";
 

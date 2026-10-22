@@ -13,8 +13,7 @@ public sealed class ClickHouseProvider : SqlProviderBase
 {
     public override string Id => "clickhouse";
     public override string DisplayName => "ClickHouse";
-    public override string Badge => "CH";
-    public override string BrandColor => "#CA8A04";
+    public override string BrandColor => "#FFCC01";
     public override int DefaultPort => 8123;
     public override string DefaultUsername => "default";
     public override string DefaultDatabase => "default";

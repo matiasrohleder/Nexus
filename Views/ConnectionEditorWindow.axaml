@@ -33,12 +33,14 @@
         </Style>
     </Window.Styles>
 
-    <Grid RowDefinitions="Auto,*,Auto">
+    <Grid RowDefinitions="Auto,*,Auto,Auto">
         <TextBlock Grid.Row="0" Text="{Binding DialogTitle}" Margin="22 18 22 10"
                    FontSize="18" FontWeight="SemiBold" />
 
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="22 0 22 8">
-            <StackPanel Spacing="14">
+        <!-- Inset via the content's Margin, not ScrollViewer.Padding: the padding isn't subtracted when
+             measuring, so long values (file paths) pushed the Browse button off the right edge. -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Spacing="14" Margin="22 0 22 8">
 
                 <!-- Engine tiles -->
                 <StackPanel Spacing="6">
@@ -63,10 +65,8 @@
                             <DataTemplate x:DataType="prov:IDatabaseProvider">
                                 <StackPanel Orientation="Vertical" Width="88" Height="62" Spacing="6"
                                             HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <Border Classes="badge" Background="{Binding BrandColor}" Height="22" MinWidth="28"
-                                            HorizontalAlignment="Center" Margin="0 9 0 0">
-                                        <TextBlock Text="{Binding Badge}" FontSize="11" />
-                                    </Border>
+                                    <c:EngineLogo Engine="{Binding Id}" Brand="{Binding BrandColor}" Size="24"
+                                                  HorizontalAlignment="Center" Margin="0 7 0 0" />
                                     <TextBlock Text="{Binding DisplayName}" FontSize="11"
                                                HorizontalAlignment="Center" TextTrimming="CharacterEllipsis" />
                                 </StackPanel>
@@ -166,17 +166,21 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
                 </StackPanel>
-
-                <!-- Test result -->
-                <Border Padding="12 10" CornerRadius="6" Background="#252526" BorderBrush="#3F3F46" BorderThickness="1"
-                        IsVisible="{Binding HasTestMessage}">
-                    <SelectableTextBlock Text="{Binding TestMessage}" TextWrapping="Wrap"
-                                         Foreground="{Binding TestSucceeded, Converter={x:Static vm:BoolBrushes.Instance}}" />
-                </Border>
             </StackPanel>
         </ScrollViewer>
 
-        <Border Grid.Row="2" Background="#252526" BorderBrush="#3F3F46" BorderThickness="0 1 0 0" Padding="22 12">
+        <!-- Test result: pinned above the buttons (outside the scroll area) so it's always seen -->
+        <Border Grid.Row="2" Padding="12 10" Margin="22 4 22 12" CornerRadius="6" Background="#252526"
+                BorderBrush="#3F3F46" BorderThickness="1" IsVisible="{Binding HasTestMessage}">
+            <Grid ColumnDefinitions="Auto,*">
+                <c:Icon Kind="{Binding TestIcon}" Size="16" VerticalAlignment="Top" Margin="0 1 10 0"
+                        Foreground="{Binding TestColor}" />
+                <SelectableTextBlock Grid.Column="1" Text="{Binding TestMessage}" TextWrapping="Wrap" MaxHeight="120"
+                                     Foreground="{Binding TestColor}" />
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="3" Background="#252526" BorderBrush="#3F3F46" BorderThickness="0 1 0 0" Padding="22 12">
             <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto">
                 <Button Grid.Column="0" Command="{Binding TestCommand}" IsEnabled="{Binding !IsBusy}" Classes="toolbar">
                     <StackPanel Orientation="Horizontal" Spacing="6">
