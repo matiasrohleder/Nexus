@@ -19,8 +19,7 @@ public sealed class RedisProvider : IDatabaseProvider
 {
     public string Id => "redis";
     public string DisplayName => "Redis";
-    public string Badge => "Rd";
-    public string BrandColor => "#DC2626";
+    public string BrandColor => "#FF4438";
     public int DefaultPort => 6379;
     public string DefaultUsername => "";
     public string DefaultDatabase => "0";

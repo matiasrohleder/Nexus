@@ -13,8 +13,7 @@ public class MySqlProvider : SqlProviderBase
 {
     public override string Id => "mysql";
     public override string DisplayName => "MySQL";
-    public override string Badge => "My";
-    public override string BrandColor => "#0EA5E9";
+    public override string BrandColor => "#4479A1";
     public override int DefaultPort => 3306;
     public override string DefaultUsername => "root";
     public override string DefaultDatabase => "mysql";
@@ -152,6 +151,5 @@ public sealed class MariaDbProvider : MySqlProvider
 {
     public override string Id => "mariadb";
     public override string DisplayName => "MariaDB";
-    public override string Badge => "Ma";
-    public override string BrandColor => "#B45309";
+    public override string BrandColor => "#003545";
 }

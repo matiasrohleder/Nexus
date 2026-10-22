@@ -34,7 +34,7 @@ public partial class TreeNodeViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(StatusFill), nameof(StatusStroke), nameof(StatusText))]
     private bool _hasConnectError;
 
-    // Status dot next to the engine badge: hollow gray = disconnected, green = connected, red = failed.
+    // Status dot next to the engine logo: hollow gray = disconnected, green = connected, red = failed.
     public string StatusFill => HasConnectError ? "#F87171" : IsConnected ? "#4ADE80" : "Transparent";
     public string StatusStroke => HasConnectError ? "#F87171" : IsConnected ? "#4ADE80" : "#6B7280";
     public string? StatusText => !IsConnection ? null
@@ -54,12 +54,12 @@ public partial class TreeNodeViewModel : ObservableObject
     public string? Detail { get; init; }
     public bool HasDetail => !string.IsNullOrEmpty(Detail);
 
-    /// <summary>Connection roots: engine badge ("Pg") + brand color, and the user's accent color.</summary>
-    public string? Badge { get; init; }
-    public string BadgeColor { get; init; } = "#3F3F46";
+    /// <summary>Connection roots: engine id (picks the logo) + brand color, and the user's accent color.</summary>
+    public string? Engine { get; init; }
+    public string BrandColor { get; init; } = "#3F3F46";
     public string AccentColor { get; init; } = "Transparent";
-    public bool HasBadge => Badge is not null;
-    public bool HasIcon => Badge is null && Icon.Length > 0;
+    public bool HasLogo => Engine is not null;
+    public bool HasIcon => Engine is null && Icon.Length > 0;
     public ObservableCollection<TreeNodeViewModel> Children { get; } = new();
 
     /// <summary>Connection this node belongs to (set for every node under a connection root).</summary>

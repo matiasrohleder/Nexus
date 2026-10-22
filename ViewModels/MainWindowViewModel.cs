@@ -96,8 +96,8 @@ public partial class MainWindowViewModel : ViewModelBase
         var node = new TreeNodeViewModel(c.Name, "database", NodeKind.Connection, LoadContainersAsync)
         {
             Connection = c,
-            Badge = provider.Badge,
-            BadgeColor = provider.BrandColor,
+            Engine = provider.Id,
+            BrandColor = provider.BrandColor,
             AccentColor = c.Color,
             IsConnected = ConnectionStatus.IsConnected(c.Id)
         };

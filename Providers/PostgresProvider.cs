@@ -14,8 +14,7 @@ public sealed class PostgresProvider : SqlProviderBase
 {
     public override string Id => "postgresql";
     public override string DisplayName => "PostgreSQL";
-    public override string Badge => "Pg";
-    public override string BrandColor => "#336791";
+    public override string BrandColor => "#4169E1";
     public override int DefaultPort => 5432;
     public override string DefaultUsername => "postgres";
     public override string DefaultDatabase => "postgres";

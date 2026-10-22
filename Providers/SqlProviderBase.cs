@@ -19,7 +19,6 @@ public abstract class SqlProviderBase : IDatabaseProvider
 {
     public abstract string Id { get; }
     public abstract string DisplayName { get; }
-    public abstract string Badge { get; }
     public abstract string BrandColor { get; }
     public abstract int DefaultPort { get; }
     public abstract string DefaultUsername { get; }

@@ -154,7 +154,8 @@ driver. Key ideas that span multiple files:
   `avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml`); DataGrid version lags core Avalonia.
 - **No emoji in the UI** — emoji fonts differ per OS and are missing on many Linux installs
   (they render as tofu). Use `Controls/Icon` (`<c:Icon Kind="table" />`, stroked 24×24 paths;
-  add new kinds to its `Paths` table). Engines show a two-letter `Badge` on their `BrandColor`.
+  add new kinds to its `Paths` table). Engines show their real logo via `Controls/EngineLogo`
+  (filled Simple Icons paths, CC0, keyed by provider `Id`) on a tile of the official `BrandColor`.
 - Monospace text uses the bundled JetBrains Mono via `{StaticResource MonoFont}` (App.axaml).
 - Two-way `ComboBox.SelectedItem` bindings push `null` while a tab's view re-binds; bind to a
   null-ignoring proxy (`QueryDocumentViewModel.ConnectionChoice`/`DatabaseChoice`).

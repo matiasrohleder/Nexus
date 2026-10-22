@@ -201,16 +201,15 @@
                             <TreeDataTemplate ItemsSource="{Binding Children}" x:DataType="vm:TreeNodeViewModel">
                                 <StackPanel Orientation="Horizontal" Spacing="7" Margin="0 2"
                                             Background="Transparent" ToolTip.Tip="{Binding StatusText}">
-                                    <Border IsVisible="{Binding HasBadge}" Width="3" Height="16" CornerRadius="1.5"
+                                    <Border IsVisible="{Binding HasLogo}" Width="3" Height="16" CornerRadius="1.5"
                                             Background="{Binding AccentColor}" VerticalAlignment="Center" />
-                                    <Border IsVisible="{Binding HasBadge}" Classes="badge" Background="{Binding BadgeColor}">
-                                        <TextBlock Text="{Binding Badge}" />
-                                    </Border>
+                                    <c:EngineLogo IsVisible="{Binding HasLogo}" Engine="{Binding Engine}"
+                                                  Brand="{Binding BrandColor}" VerticalAlignment="Center" />
                                     <c:Icon IsVisible="{Binding HasIcon}" Kind="{Binding Icon}" Foreground="{Binding IconColor}"
                                             Size="15" StrokeThickness="1.8" VerticalAlignment="Center" />
                                     <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
                                     <!-- Connection state: hollow gray = disconnected, green = connected, red = failed -->
-                                    <Ellipse IsVisible="{Binding HasBadge}" Width="8" Height="8" StrokeThickness="1.5"
+                                    <Ellipse IsVisible="{Binding HasLogo}" Width="8" Height="8" StrokeThickness="1.5"
                                              Fill="{Binding StatusFill}" Stroke="{Binding StatusStroke}"
                                              VerticalAlignment="Center" />
                                     <TextBlock Text="{Binding Detail}" IsVisible="{Binding HasDetail}" FontSize="12"
