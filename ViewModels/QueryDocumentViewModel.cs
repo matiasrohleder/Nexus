@@ -14,6 +14,8 @@ namespace Nexus.ViewModels;
 /// <summary>One SQL editor tab: its text, target connection, results grid, and Run/Stop commands.</summary>
 public partial class QueryDocumentViewModel : DocumentViewModel
 {
+    public override string Icon => "query";
+
     private CancellationTokenSource? _runCts;
 
     [ObservableProperty] private string _documentText;
@@ -46,8 +48,35 @@ public partial class QueryDocumentViewModel : DocumentViewModel
         _ = LoadDatabasesAsync();
     }
 
+    /// <summary>
+    /// Two-way target for the connection picker. Ignores the null a ComboBox pushes while it
+    /// re-binds (e.g. when switching back to this tab), which used to silently disconnect the tab,
+    /// and keeps a database-pinned clone when the picker reports the same profile.
+    /// </summary>
+    public SavedConnection? ConnectionChoice
+    {
+        get => Connection;
+        set
+        {
+            if (value is not null && value.Id != Connection?.Id) Connection = value;
+        }
+    }
+
+    /// <summary>Two-way target for the database picker; same null guard as <see cref="ConnectionChoice"/>.</summary>
+    public string? DatabaseChoice
+    {
+        get => SelectedDatabase;
+        set
+        {
+            if (value is not null) SelectedDatabase = value;
+        }
+    }
+
+    partial void OnSelectedDatabaseChanged(string? value) => OnPropertyChanged(nameof(DatabaseChoice));
+
     partial void OnConnectionChanged(SavedConnection? value)
     {
+        OnPropertyChanged(nameof(ConnectionChoice));
         OnPropertyChanged(nameof(ConnectionName));
         OnPropertyChanged(nameof(SupportsExplain));
         SelectedDatabase = null;

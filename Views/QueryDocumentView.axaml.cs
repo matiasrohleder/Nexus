@@ -191,7 +191,7 @@ public partial class QueryDocumentView : UserControl
         var owner = TopLevel.GetTopLevel(this) as Window;
         if (owner is null) return null;
 
-        var input = new TextBox { Watermark = label };
+        var input = new TextBox { PlaceholderText = label };
         var ok = new Button { Content = "Save", MinWidth = 80 };
         var cancel = new Button { Content = "Cancel", MinWidth = 80 };
         var dialog = new Window

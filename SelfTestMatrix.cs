@@ -31,6 +31,7 @@ public static class SelfTestMatrix
         _failures = 0;
         var provider = ProviderRegistry.Get(providerId);
         Console.WriteLine($"== Nexus self-test matrix: {provider.DisplayName} ==");
+        SecretStore.UseEphemeral(); // never touch the user's real keyring from a test run
         QueryProfiler.Instance.DirectDispatch = true;
         QueryProfiler.Instance.IsCapturing = true;
 

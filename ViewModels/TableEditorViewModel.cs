@@ -92,12 +92,14 @@ public partial class TableEditorViewModel : DocumentViewModel
     /// <summary>Raised after (re)load so the view can rebuild grid columns.</summary>
     public event EventHandler? SchemaLoaded;
 
+    public override string Icon => "edit";
+
     public TableEditorViewModel(SavedConnection connection, string container, string table)
     {
         Connection = connection;
         Container = container;
         Table = table;
-        Title = $"✎ {table}";
+        Title = table;
         _ = LoadAsync();
     }
 

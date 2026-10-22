@@ -1,9 +1,12 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:Nexus.ViewModels"
+        xmlns:c="using:Nexus.Controls"
         x:Class="Nexus.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
-        Width="1280" Height="800"
+        Width="1280" Height="800" MinWidth="820" MinHeight="520"
+        WindowStartupLocation="CenterScreen"
+        Icon="/Assets/nexus.ico"
         Background="#1E1E1E"
         Title="Nexus">
 
@@ -16,17 +19,23 @@
     <Panel>
     <DockPanel>
         <!-- Title bar / global toolbar -->
-        <Border DockPanel.Dock="Top" Background="#181818" Padding="12 8"
+        <Border DockPanel.Dock="Top" Background="#181818" Padding="12 7"
                 BorderBrush="#3F3F46" BorderThickness="0 0 0 1">
             <Grid ColumnDefinitions="Auto,*,Auto">
-                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                    <TextBlock Text="⬡" FontSize="18" Foreground="#3B82F6" VerticalAlignment="Center" />
-                    <TextBlock Text="Nexus" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="9" VerticalAlignment="Center">
+                    <Image Source="/Assets/nexus-256.png" Width="22" Height="22"
+                           RenderOptions.BitmapInterpolationMode="HighQuality" />
+                    <TextBlock Text="Nexus" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
                     <TextBlock Text="{Binding VersionText}" FontSize="12" Opacity="0.5"
-                               VerticalAlignment="Center" Margin="2 3 0 0" />
+                               VerticalAlignment="Center" Margin="0 2 0 0" />
                 </StackPanel>
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
-                    <Button Content="⧉ New Query" Classes="toolbar" Command="{Binding NewQueryCommand}" />
+                    <Button Classes="toolbar" Command="{Binding NewQueryCommand}" ToolTip.Tip="New query (Ctrl+N)">
+                        <StackPanel Orientation="Horizontal" Spacing="7">
+                            <c:Icon Kind="query" Size="15" />
+                            <TextBlock Text="New Query" />
+                        </StackPanel>
+                    </Button>
                 </StackPanel>
             </Grid>
         </Border>
@@ -42,63 +51,133 @@
             <!-- Object Explorer -->
             <Border Name="SidebarPanel" Grid.Column="0" Background="#252526">
                 <Grid RowDefinitions="Auto,*">
-                    <Border Grid.Row="0" Padding="10 8" BorderBrush="#3F3F46" BorderThickness="0 0 0 1">
+                    <Border Grid.Row="0" Padding="12 6 6 6" BorderBrush="#3F3F46" BorderThickness="0 0 0 1">
                         <Grid ColumnDefinitions="*,Auto">
                             <TextBlock Grid.Column="0" Text="CONNECTIONS" FontSize="11"
                                        FontWeight="Bold" Opacity="0.6" VerticalAlignment="Center" />
-                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2">
-                                <Button Content="＋" ToolTip.Tip="Add connection" Padding="6 2"
-                                        Background="Transparent" Command="{Binding AddConnectionCommand}" />
-                                <Button Content="✎" ToolTip.Tip="Edit selected" Padding="6 2"
-                                        Background="Transparent" Command="{Binding EditConnectionCommand}" />
-                                <Button Content="⟳" ToolTip.Tip="Refresh" Padding="6 2"
-                                        Background="Transparent" Command="{Binding RefreshConnectionCommand}" />
-                                <Button Content="🗑" ToolTip.Tip="Remove selected" Padding="6 2"
-                                        Background="Transparent" Command="{Binding RemoveConnectionCommand}" />
-                                <Button Content="⇄" ToolTip.Tip="Move sidebar to the other side" Padding="6 2"
-                                        Background="Transparent" Command="{Binding ToggleSidebarSideCommand}" />
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="1">
+                                <Button Classes="icon" ToolTip.Tip="Add connection" Command="{Binding AddConnectionCommand}">
+                                    <c:Icon Kind="plus" Size="16" />
+                                </Button>
+                                <Button Classes="icon" ToolTip.Tip="Edit selected connection" Command="{Binding EditConnectionCommand}">
+                                    <c:Icon Kind="edit" Size="15" />
+                                </Button>
+                                <Button Classes="icon" ToolTip.Tip="Refresh" Command="{Binding RefreshConnectionCommand}">
+                                    <c:Icon Kind="refresh" Size="15" />
+                                </Button>
+                                <Button Classes="icon" ToolTip.Tip="Remove selected connection" Command="{Binding RemoveConnectionCommand}">
+                                    <c:Icon Kind="trash" Size="15" />
+                                </Button>
+                                <Button Classes="icon" ToolTip.Tip="More">
+                                    <c:Icon Kind="more" Size="16" StrokeThickness="3" />
+                                    <Button.Flyout>
+                                        <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                            <MenuItem Header="Import connections…" Command="{Binding ImportConnectionsCommand}">
+                                                <MenuItem.Icon><c:Icon Kind="import" /></MenuItem.Icon>
+                                            </MenuItem>
+                                            <MenuItem Header="Export connections…" Command="{Binding ExportConnectionsCommand}">
+                                                <MenuItem.Icon><c:Icon Kind="export" /></MenuItem.Icon>
+                                            </MenuItem>
+                                            <MenuItem Header="Open data folder" Command="{Binding OpenDataFolderCommand}">
+                                                <MenuItem.Icon><c:Icon Kind="open" /></MenuItem.Icon>
+                                            </MenuItem>
+                                            <Separator />
+                                            <MenuItem Header="Move sidebar to the other side" Command="{Binding ToggleSidebarSideCommand}">
+                                                <MenuItem.Icon><c:Icon Kind="swap" /></MenuItem.Icon>
+                                            </MenuItem>
+                                            <Separator />
+                                            <MenuItem Header="About Nexus" Command="{Binding ShowAboutCommand}">
+                                                <MenuItem.Icon><c:Icon Kind="info" /></MenuItem.Icon>
+                                            </MenuItem>
+                                        </MenuFlyout>
+                                    </Button.Flyout>
+                                </Button>
                             </StackPanel>
                         </Grid>
                     </Border>
+
+                    <!-- First-run hint when there are no connections yet -->
+                    <StackPanel Grid.Row="1" IsVisible="{Binding !HasConnections}" Margin="16 24" Spacing="10">
+                        <TextBlock Text="No connections yet" FontWeight="SemiBold" Opacity="0.8" />
+                        <TextBlock Text="Add one to browse databases, run queries and administer servers."
+                                   TextWrapping="Wrap" Opacity="0.55" FontSize="12" />
+                        <Button Classes="toolbar accent" HorizontalAlignment="Left" Command="{Binding AddConnectionCommand}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <c:Icon Kind="plus" Size="14" />
+                                <TextBlock Text="Add connection" />
+                            </StackPanel>
+                        </Button>
+                        <Button Classes="toolbar" HorizontalAlignment="Left" Command="{Binding ImportConnectionsCommand}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <c:Icon Kind="import" Size="14" />
+                                <TextBlock Text="Import connections…" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
 
                     <TreeView Grid.Row="1" Name="ExplorerTree"
                               x:CompileBindings="False"
                               ItemsSource="{Binding ConnectionNodes}"
                               SelectedItem="{Binding SelectedNode}"
-                              Background="Transparent">
+                              Background="Transparent" Padding="0 4">
                         <TreeView.ContextMenu>
                             <ContextMenu>
-                                <MenuItem Header="🔍 View Data (top 100)" Command="{Binding OpenTableCommand}"
-                                          CommandParameter="{Binding SelectedNode}" />
-                                <MenuItem Header="✎ Edit Data" Command="{Binding EditTableDataCommand}"
-                                          CommandParameter="{Binding SelectedNode}" />
-                                <MenuItem Header="📜 View DDL" Command="{Binding ViewDdlCommand}"
-                                          CommandParameter="{Binding SelectedNode}" />
-                                <MenuItem Header="📥 Import CSV…" Command="{Binding ImportCsvCommand}"
-                                          CommandParameter="{Binding SelectedNode}" />
+                                <MenuItem Header="View Data (top 100)" Command="{Binding OpenTableCommand}"
+                                          CommandParameter="{Binding SelectedNode}">
+                                    <MenuItem.Icon><c:Icon Kind="search" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="Edit Data" Command="{Binding EditTableDataCommand}"
+                                          CommandParameter="{Binding SelectedNode}">
+                                    <MenuItem.Icon><c:Icon Kind="edit" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="View DDL" Command="{Binding ViewDdlCommand}"
+                                          CommandParameter="{Binding SelectedNode}">
+                                    <MenuItem.Icon><c:Icon Kind="code" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="Import CSV…" Command="{Binding ImportCsvCommand}"
+                                          CommandParameter="{Binding SelectedNode}">
+                                    <MenuItem.Icon><c:Icon Kind="import" /></MenuItem.Icon>
+                                </MenuItem>
                                 <Separator />
-                                <MenuItem Header="⚠ Truncate Table…" Command="{Binding TruncateTableCommand}"
-                                          CommandParameter="{Binding SelectedNode}" />
-                                <MenuItem Header="🗑 Drop…" Command="{Binding DropObjectCommand}"
-                                          CommandParameter="{Binding SelectedNode}" />
+                                <MenuItem Header="Truncate Table…" Command="{Binding TruncateTableCommand}"
+                                          CommandParameter="{Binding SelectedNode}">
+                                    <MenuItem.Icon><c:Icon Kind="warning" Foreground="#FBBF24" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="Drop…" Command="{Binding DropObjectCommand}"
+                                          CommandParameter="{Binding SelectedNode}">
+                                    <MenuItem.Icon><c:Icon Kind="trash" Foreground="#F87171" /></MenuItem.Icon>
+                                </MenuItem>
                                 <Separator />
-                                <MenuItem Header="🖥 Server Administration" Command="{Binding OpenServerAdminCommand}"
-                                          CommandParameter="{Binding SelectedNode}" />
-                                <MenuItem Header="⟳ Refresh" Command="{Binding RefreshConnectionCommand}" />
+                                <MenuItem Header="Server Administration" Command="{Binding OpenServerAdminCommand}"
+                                          CommandParameter="{Binding SelectedNode}">
+                                    <MenuItem.Icon><c:Icon Kind="server" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="Refresh" Command="{Binding RefreshConnectionCommand}">
+                                    <MenuItem.Icon><c:Icon Kind="refresh" /></MenuItem.Icon>
+                                </MenuItem>
                             </ContextMenu>
                         </TreeView.ContextMenu>
                         <TreeView.Styles>
                             <Style Selector="TreeViewItem">
                                 <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+                                <Setter Property="MinHeight" Value="28" />
                             </Style>
                         </TreeView.Styles>
                         <TreeView.ItemTemplate>
                             <TreeDataTemplate ItemsSource="{Binding Children}" x:DataType="vm:TreeNodeViewModel">
-                                <StackPanel Orientation="Horizontal" Spacing="6" Margin="0 2">
-                                    <TextBlock Text="{Binding Glyph}" FontSize="13" VerticalAlignment="Center" />
+                                <StackPanel Orientation="Horizontal" Spacing="7" Margin="0 2">
+                                    <Border IsVisible="{Binding HasBadge}" Width="3" Height="16" CornerRadius="1.5"
+                                            Background="{Binding AccentColor}" VerticalAlignment="Center" />
+                                    <Border IsVisible="{Binding HasBadge}" Classes="badge" Background="{Binding BadgeColor}">
+                                        <TextBlock Text="{Binding Badge}" />
+                                    </Border>
+                                    <c:Icon IsVisible="{Binding HasIcon}" Kind="{Binding Icon}" Foreground="{Binding IconColor}"
+                                            Size="15" StrokeThickness="1.8" VerticalAlignment="Center" />
                                     <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+                                    <TextBlock Text="{Binding Detail}" IsVisible="{Binding HasDetail}" FontSize="12"
+                                               Opacity="0.45" VerticalAlignment="Center" />
                                     <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsLoading}"
-                                                 Width="36" Height="2" VerticalAlignment="Center" />
+                                                 Width="36" Height="2" MinWidth="0" VerticalAlignment="Center" />
                                 </StackPanel>
                             </TreeDataTemplate>
                         </TreeView.ItemTemplate>
@@ -106,23 +185,26 @@
                 </Grid>
             </Border>
 
-            <GridSplitter Name="MainSplitter" Grid.Column="1" Width="4" Background="#3F3F46" />
+            <GridSplitter Name="MainSplitter" Grid.Column="1" Width="4" Background="#2B2B2F" />
 
             <!-- Editors (top) + Profiler (bottom) -->
-            <Grid Name="ContentPanel" Grid.Column="2" RowDefinitions="*,4,260">
+            <Grid Name="ContentPanel" Grid.Column="2" RowDefinitions="*,4,240">
 
                 <!-- Query tabs -->
                 <Panel Grid.Row="0">
                     <TabControl ItemsSource="{Binding Documents}"
                                 SelectedItem="{Binding SelectedDocument}"
-                                Background="#1E1E1E">
+                                Background="#1E1E1E" Padding="0">
                         <TabControl.ItemTemplate>
-                            <DataTemplate x:DataType="vm:QueryDocumentViewModel" x:CompileBindings="False">
-                                <StackPanel Orientation="Horizontal" Spacing="8">
+                            <DataTemplate x:DataType="vm:DocumentViewModel" x:CompileBindings="False">
+                                <StackPanel Orientation="Horizontal" Spacing="7">
+                                    <c:Icon Kind="{Binding Icon}" Size="14" Opacity="0.75" VerticalAlignment="Center" />
                                     <TextBlock Text="{Binding Title}" VerticalAlignment="Center" />
-                                    <Button Content="✕" Padding="4 0" FontSize="11" Background="Transparent"
+                                    <Button Classes="icon" Padding="3" Margin="2 0 -6 0" ToolTip.Tip="Close tab"
                                             Command="{Binding DataContext.CloseDocumentCommand, RelativeSource={RelativeSource AncestorType=TabControl}}"
-                                            CommandParameter="{Binding}" />
+                                            CommandParameter="{Binding}">
+                                        <c:Icon Kind="close" Size="12" />
+                                    </Button>
                                 </StackPanel>
                             </DataTemplate>
                         </TabControl.ItemTemplate>
@@ -131,34 +213,56 @@
                     <!-- Empty state -->
                     <StackPanel IsVisible="{Binding !HasDocuments}" HorizontalAlignment="Center"
                                 VerticalAlignment="Center" Spacing="10">
-                        <TextBlock Text="⬡" FontSize="48" Foreground="#3B82F6" HorizontalAlignment="Center" Opacity="0.6" />
-                        <TextBlock Text="No queries open" FontSize="16" Opacity="0.7" HorizontalAlignment="Center" />
+                        <Image Source="/Assets/nexus-256.png" Width="72" Height="72" Opacity="0.9"
+                               RenderOptions.BitmapInterpolationMode="HighQuality" Margin="0 0 0 6" />
+                        <TextBlock Text="No queries open" FontSize="17" FontWeight="SemiBold" Opacity="0.85"
+                                   HorizontalAlignment="Center" />
                         <TextBlock Text="Add a connection, then press &quot;New Query&quot; or double-click a table."
                                    Opacity="0.5" HorizontalAlignment="Center" />
-                        <Button Content="⧉ New Query" Classes="toolbar accent" HorizontalAlignment="Center"
-                                Command="{Binding NewQueryCommand}" />
+                        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center" Margin="0 6 0 0">
+                            <Button Classes="toolbar accent" Command="{Binding NewQueryCommand}" IsVisible="{Binding HasConnections}">
+                                <StackPanel Orientation="Horizontal" Spacing="7">
+                                    <c:Icon Kind="query" Size="15" />
+                                    <TextBlock Text="New Query" />
+                                </StackPanel>
+                            </Button>
+                            <Button Classes="toolbar accent" Command="{Binding AddConnectionCommand}" IsVisible="{Binding !HasConnections}">
+                                <StackPanel Orientation="Horizontal" Spacing="7">
+                                    <c:Icon Kind="plus" Size="15" />
+                                    <TextBlock Text="Add connection" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                        <TextBlock Text="F5 / Ctrl+Enter run · Ctrl+Space autocomplete · Ctrl+N new query"
+                                   FontSize="11" Opacity="0.35" HorizontalAlignment="Center" Margin="0 10 0 0" />
                     </StackPanel>
                 </Panel>
 
-                <GridSplitter Grid.Row="1" Height="4" HorizontalAlignment="Stretch" Background="#3F3F46" />
+                <GridSplitter Grid.Row="1" Height="4" HorizontalAlignment="Stretch" Background="#2B2B2F" />
 
                 <!-- Bottom panel: Profiler | History | Snippets -->
-                <Border Grid.Row="2" Background="#252526" BorderBrush="#3F3F46" BorderThickness="0 1 0 0">
+                <Border Grid.Row="2" Background="#252526">
                     <TabControl Padding="0">
-                        <TabItem Header="⏱ Profiler" FontSize="12">
+                        <TabItem>
+                            <TabItem.Header>
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <c:Icon Kind="clock" Size="14" />
+                                    <TextBlock Text="Profiler" />
+                                </StackPanel>
+                            </TabItem.Header>
                             <Grid RowDefinitions="Auto,*" DataContext="{Binding Profiler}">
-                                <Border Grid.Row="0" Padding="10 4" BorderBrush="#3F3F46" BorderThickness="0 0 0 1">
+                                <Border Grid.Row="0" Padding="10 5" BorderBrush="#3F3F46" BorderThickness="0 0 0 1">
                                     <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto">
                                         <CheckBox Grid.Column="0" Content="Capture app queries"
                                                   IsChecked="{Binding IsCapturing}" VerticalAlignment="Center" />
                                         <CheckBox Grid.Column="1" Content="Server activity" Margin="12 0 6 0"
                                                   IsChecked="{Binding CaptureServerActivity}" VerticalAlignment="Center" />
-                                        <ComboBox Grid.Column="2" MinWidth="150"
+                                        <ComboBox Grid.Column="2" MinWidth="160" PlaceholderText="Connection"
                                                   ItemsSource="{Binding Connections}"
                                                   SelectedItem="{Binding ServerActivityConnection}"
                                                   VerticalAlignment="Center" />
-                                        <TextBlock Grid.Column="3" Text="{Binding StatusText}" Opacity="0.6"
-                                                   VerticalAlignment="Center" Margin="14 0" />
+                                        <TextBlock Grid.Column="3" Text="{Binding StatusText}" Opacity="0.55"
+                                                   VerticalAlignment="Center" Margin="14 0" TextTrimming="CharacterEllipsis" />
                                         <Button Grid.Column="4" Content="Clear" Classes="toolbar"
                                                 Command="{Binding ClearCommand}" />
                                     </Grid>
@@ -181,13 +285,21 @@
                             </Grid>
                         </TabItem>
 
-                        <TabItem Header="🕘 History" FontSize="12">
-                            <Grid RowDefinitions="Auto,*">
-                                <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8" Margin="8 4">
-                                    <TextBlock Text="Double-click to reopen a query" Opacity="0.5"
-                                               VerticalAlignment="Center" FontSize="12" />
-                                    <Button Content="Clear" Classes="toolbar" Command="{Binding ClearHistoryCommand}" />
+                        <TabItem>
+                            <TabItem.Header>
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <c:Icon Kind="history" Size="14" />
+                                    <TextBlock Text="History" />
                                 </StackPanel>
+                            </TabItem.Header>
+                            <Grid RowDefinitions="Auto,*">
+                                <Border Grid.Row="0" Padding="10 5" BorderBrush="#3F3F46" BorderThickness="0 0 0 1">
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <TextBlock Text="Double-click a row to reopen the query" Opacity="0.55"
+                                                   VerticalAlignment="Center" FontSize="12" />
+                                        <Button Grid.Column="1" Content="Clear" Classes="toolbar" Command="{Binding ClearHistoryCommand}" />
+                                    </Grid>
+                                </Border>
                                 <DataGrid Grid.Row="1" Name="HistoryGrid" ItemsSource="{Binding History}"
                                           AutoGenerateColumns="False" IsReadOnly="True"
                                           GridLinesVisibility="Horizontal" FontSize="12">
@@ -202,15 +314,23 @@
                             </Grid>
                         </TabItem>
 
-                        <TabItem Header="★ Snippets" FontSize="12">
-                            <Grid RowDefinitions="Auto,*">
-                                <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8" Margin="8 4">
-                                    <TextBlock Text="Double-click to open — save snippets from the query editor (★)"
-                                               Opacity="0.5" VerticalAlignment="Center" FontSize="12" />
-                                    <Button Content="Delete" Classes="toolbar"
-                                            Command="{Binding DeleteSnippetCommand}"
-                                            CommandParameter="{Binding #SnippetsGrid.SelectedItem}" />
+                        <TabItem>
+                            <TabItem.Header>
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <c:Icon Kind="star" Size="14" />
+                                    <TextBlock Text="Snippets" />
                                 </StackPanel>
+                            </TabItem.Header>
+                            <Grid RowDefinitions="Auto,*">
+                                <Border Grid.Row="0" Padding="10 5" BorderBrush="#3F3F46" BorderThickness="0 0 0 1">
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <TextBlock Text="Double-click to open · save snippets with the star button in the query editor"
+                                                   Opacity="0.55" VerticalAlignment="Center" FontSize="12" />
+                                        <Button Grid.Column="1" Content="Delete" Classes="toolbar"
+                                                Command="{Binding DeleteSnippetCommand}"
+                                                CommandParameter="{Binding #SnippetsGrid.SelectedItem}" />
+                                    </Grid>
+                                </Border>
                                 <DataGrid Grid.Row="1" Name="SnippetsGrid" ItemsSource="{Binding Snippets}"
                                           AutoGenerateColumns="False" IsReadOnly="True"
                                           GridLinesVisibility="Horizontal" FontSize="12">
@@ -230,14 +350,22 @@
     <!-- In-window confirmation overlay: no OS dialog windows, so it can never get lost
          behind the main window (Wayland-safe) and never deadlocks the UI. -->
     <Border Name="ConfirmOverlay" Background="#B0101010" IsVisible="False" ZIndex="1000">
-        <Border MaxWidth="480" Background="#252526" CornerRadius="8" Padding="20"
+        <Border MinWidth="360" MaxWidth="520" Background="#252526" CornerRadius="10" Padding="22 20"
                 HorizontalAlignment="Center" VerticalAlignment="Center"
-                BorderBrush="#3F3F46" BorderThickness="1">
-            <StackPanel Spacing="16">
-                <SelectableTextBlock Name="ConfirmText" TextWrapping="Wrap" FontSize="14" />
+                BorderBrush="#3F3F46" BorderThickness="1"
+                BoxShadow="0 12 40 0 #80000000">
+            <StackPanel Spacing="18">
+                <Grid ColumnDefinitions="Auto,*">
+                    <c:Icon Name="OverlayIcon" Kind="info" Size="22" Foreground="#60A5FA"
+                            VerticalAlignment="Top" Margin="0 0 14 0" />
+                    <SelectableTextBlock Grid.Column="1" Name="ConfirmText" TextWrapping="Wrap" FontSize="14"
+                                         LineHeight="21" />
+                </Grid>
                 <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-                    <Button Name="OverlayCancelButton" Content="Cancel" MinWidth="84" Classes="toolbar" />
-                    <Button Name="OverlayOkButton" Content="Confirm" MinWidth="84" Classes="toolbar accent" />
+                    <Button Name="OverlayCancelButton" Content="Cancel" MinWidth="88" Classes="toolbar"
+                            HorizontalContentAlignment="Center" />
+                    <Button Name="OverlayOkButton" Content="Confirm" MinWidth="88" Classes="toolbar accent"
+                            HorizontalContentAlignment="Center" />
                 </StackPanel>
             </StackPanel>
         </Border>

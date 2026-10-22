@@ -12,7 +12,8 @@ public sealed class SqliteProvider : SqlProviderBase
 {
     public override string Id => "sqlite";
     public override string DisplayName => "SQLite";
-    public override string Glyph => "🪶";
+    public override string Badge => "SL";
+    public override string BrandColor => "#0369A1";
     public override int DefaultPort => 0;
     public override string DefaultUsername => "";
     public override string DefaultDatabase => "main";

@@ -33,6 +33,7 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty] private DocumentViewModel? _selectedDocument;
 
     public bool HasDocuments => Documents.Count > 0;
+    public bool HasConnections => Connections.Count > 0;
 
     /// <summary>Shown next to the app title in the top bar ("Nexus — 0.1.0").</summary>
     public string VersionText => $"— {Services.AppInfo.Version}";
@@ -46,12 +47,19 @@ public partial class MainWindowViewModel : ViewModelBase
     /// <summary>Wired by the View: opens a file picker for CSV import; returns the path or null.</summary>
     public Func<Task<string?>>? PickCsvFile { get; set; }
 
+    /// <summary>Wired by the View: save-file picker (suggested file name) → path or null.</summary>
+    public Func<string, Task<string?>>? PickExportPath { get; set; }
+
+    /// <summary>Wired by the View: open-file picker for an exported connections JSON → path or null.</summary>
+    public Func<Task<string?>>? PickImportFile { get; set; }
+
     /// <summary>Wired by the View: shows a transient notice (import results etc.).</summary>
     public Action<string>? Notify { get; set; }
 
     public MainWindowViewModel()
     {
         Documents.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasDocuments));
+        Connections.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasConnections));
         _sidebarOnLeft = _settings.SidebarOnLeft;
 
         foreach (var c in _store.Load())
@@ -66,10 +74,13 @@ public partial class MainWindowViewModel : ViewModelBase
 
     private TreeNodeViewModel BuildConnectionNode(SavedConnection c)
     {
-        var glyph = ProviderRegistry.For(c).Glyph;
-        var node = new TreeNodeViewModel(c.Name, glyph, NodeKind.Connection, LoadContainersAsync)
+        var provider = ProviderRegistry.For(c);
+        var node = new TreeNodeViewModel(c.Name, "database", NodeKind.Connection, LoadContainersAsync)
         {
-            Connection = c
+            Connection = c,
+            Badge = provider.Badge,
+            BadgeColor = provider.BrandColor,
+            AccentColor = c.Color
         };
         return node;
     }
@@ -87,7 +98,7 @@ public partial class MainWindowViewModel : ViewModelBase
             {
                 var pinned = node.Connection!.Clone();
                 pinned.Database = dbName;
-                node.AddChild(new TreeNodeViewModel(dbName, "🛢", NodeKind.Database, LoadSchemasAsync)
+                node.AddChild(new TreeNodeViewModel(dbName, "database", NodeKind.Database, LoadSchemasAsync)
                 {
                     Connection = pinned
                 });
@@ -104,7 +115,7 @@ public partial class MainWindowViewModel : ViewModelBase
         var containers = await provider.GetContainersAsync(node.Connection!);
         foreach (var container in containers)
         {
-            node.AddChild(new TreeNodeViewModel(container, "🗀", NodeKind.Schema, LoadObjectsAsync)
+            node.AddChild(new TreeNodeViewModel(container, "folder", NodeKind.Schema, LoadObjectsAsync)
             {
                 Connection = node.Connection,
                 Schema = container
@@ -122,9 +133,9 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             var (glyph, kind) = o.Kind switch
             {
-                DbObjectKind.View => ("◫", NodeKind.View),
-                DbObjectKind.Collection => ("🗂", NodeKind.Table),
-                _ => ("▦", NodeKind.Table)
+                DbObjectKind.View => ("view", NodeKind.View),
+                DbObjectKind.Collection => ("collection", NodeKind.Table),
+                _ => ("table", NodeKind.Table)
             };
             node.AddChild(new TreeNodeViewModel(o.Name, glyph, kind, LoadColumnsAsync)
             {
@@ -143,10 +154,12 @@ public partial class MainWindowViewModel : ViewModelBase
         var columns = await provider.GetColumnsAsync(node.Connection!, node.Schema!, node.Table!);
         foreach (var col in columns)
         {
-            var pk = col.IsPrimaryKey ? "🔑 " : "";
             var nullable = col.Nullable ? "" : " NOT NULL";
-            node.AddChild(new TreeNodeViewModel(
-                $"{pk}{col.Name} : {col.DataType}{nullable}", "▪", NodeKind.Column, null));
+            node.AddChild(new TreeNodeViewModel(col.Name, col.IsPrimaryKey ? "key" : "column", NodeKind.Column, null)
+            {
+                IconColor = col.IsPrimaryKey ? "#FBBF24" : "#9CA3AF",
+                Detail = $"{col.DataType}{nullable}"
+            });
         }
     }
 
@@ -205,7 +218,7 @@ public partial class MainWindowViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void RemoveConnection()
+    private async Task RemoveConnectionAsync()
     {
         var connection = ResolveSaved(SelectedNode?.Connection ?? ActiveConnection);
         if (connection is null) return;
@@ -213,11 +226,110 @@ public partial class MainWindowViewModel : ViewModelBase
         var index = Connections.IndexOf(connection);
         if (index < 0) return;
 
+        if (Confirm is not null && !await Confirm(
+                $"Remove the connection \"{connection.Name}\"?\n\n" +
+                $"Its saved password is deleted from {SecretStore.LocationName}. The database itself is not touched."))
+            return;
+
         Connections.RemoveAt(index);
         ConnectionNodes.RemoveAt(index);
+        ConnectionStore.ForgetPassword(connection);
         _store.SaveAll(Connections);
         SyncProfilerConnections();
     }
+
+    // ---- Export / import (connections.json carries no passwords, so it's safe to move) ----
+
+    [RelayCommand]
+    private async Task ExportConnectionsAsync()
+    {
+        if (PickExportPath is null) return;
+        if (Connections.Count == 0)
+        {
+            Notify?.Invoke("There are no connections to export yet.");
+            return;
+        }
+
+        var path = await PickExportPath("nexus-connections.json");
+        if (string.IsNullOrEmpty(path)) return;
+        try
+        {
+            ConnectionStore.Export(Connections, path);
+            Notify?.Invoke($"Exported {Connections.Count} connection(s) to:\n{path}\n\n" +
+                           $"Passwords are not included — they stay in {SecretStore.LocationName} on this computer.");
+        }
+        catch (Exception ex)
+        {
+            Notify?.Invoke($"Export failed: {ex.Message}");
+        }
+    }
+
+    [RelayCommand]
+    private async Task ImportConnectionsAsync()
+    {
+        if (PickImportFile is null) return;
+        var path = await PickImportFile();
+        if (string.IsNullOrEmpty(path)) return;
+
+        List<SavedConnection> imported;
+        try
+        {
+            imported = ConnectionStore.ReadExport(path);
+        }
+        catch (Exception ex)
+        {
+            Notify?.Invoke($"Could not import \"{System.IO.Path.GetFileName(path)}\":\n{ex.Message}");
+            return;
+        }
+
+        int added = 0, updated = 0;
+        foreach (var c in imported)
+        {
+            var existing = ResolveSaved(c);
+            if (existing is not null)
+            {
+                var index = Connections.IndexOf(existing);
+                Connections[index] = c;
+                ConnectionNodes[index] = BuildConnectionNode(c);
+                updated++;
+            }
+            else
+            {
+                Connections.Add(c);
+                ConnectionNodes.Add(BuildConnectionNode(c));
+                added++;
+            }
+        }
+        _store.SaveAll(Connections);
+        SyncProfilerConnections();
+
+        var message = $"Imported {added} new and updated {updated} existing connection(s).";
+        if (added > 0)
+            message += "\n\nPasswords never travel in the file — edit each new connection to enter its password on this computer.";
+        Notify?.Invoke(message);
+    }
+
+    /// <summary>Opens the folder holding connections.json, settings and history in the OS file manager.</summary>
+    [RelayCommand]
+    private void OpenDataFolder()
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(AppPaths.ConfigDir)
+            {
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            Notify?.Invoke($"Your Nexus data folder is:\n{AppPaths.ConfigDir}\n\n({ex.Message})");
+        }
+    }
+
+    [RelayCommand]
+    private void ShowAbout() =>
+        Notify?.Invoke($"Nexus {AppInfo.Version}\n\nA lightweight, cross-platform database administrator.\n\n" +
+                       $"Connections: {AppPaths.ConnectionsFile}\nPasswords: {SecretStore.LocationName}");
 
     [RelayCommand]
     private void ToggleSidebarSide()

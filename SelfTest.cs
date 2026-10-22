@@ -23,12 +23,9 @@ public static class SelfTest
         QueryProfiler.Instance.DirectDispatch = true; // headless: no UI message pump
         QueryProfiler.Instance.IsCapturing = true;    // profiler is opt-in in the app; tests need it on
 
-        // ---- 1. Encryption round-trip ----
-        var enc = CryptoService.Encrypt("s3cr3t-pw");
-        Check(enc != "s3cr3t-pw" && enc.Length > 0, "password is encrypted (not plaintext)");
-        Check(CryptoService.Decrypt(enc) == "s3cr3t-pw", "password decrypts back to original");
+        SecretStore.UseEphemeral(); // never touch the user's real keyring from a test run
 
-        // ---- 2. Build a connection ----
+        // ---- 1. Build a connection ----
         var conn = new SavedConnection
         {
             Name = "SelfTest Demo",
@@ -38,26 +35,26 @@ public static class SelfTest
             Username = Environment.GetEnvironmentVariable("NEXUS_TEST_USER") ?? "postgres",
             SslMode = "Disable"
         };
-        ConnectionStore.SetPassword(conn, Environment.GetEnvironmentVariable("NEXUS_TEST_PW") ?? "nexus123");
+        var password = Environment.GetEnvironmentVariable("NEXUS_TEST_PW") ?? "nexus123";
+        ConnectionStore.SetPassword(conn, password);
 
-        // ---- 3. Persist & reload (backup/restore the real store so we don't pollute it) ----
+        // ---- 2-3. Persist & reload (in a throwaway config dir — never the user's real store) ----
+        var root = Path.Combine(Path.GetTempPath(), $"nexus-selftest-{Guid.NewGuid():N}");
+        AppPaths.RedirectForTests(root);
         var storePath = AppPaths.ConnectionsFile;
-        var backup = File.Exists(storePath) ? File.ReadAllText(storePath) : null;
         try
         {
             var store = new ConnectionStore();
             store.SaveAll(new[] { conn });
+            var json = File.ReadAllText(storePath);
             var reloaded = store.Load();
             Check(reloaded.Count == 1, "connection persisted and reloaded");
-            Check(!reloaded[0].EncryptedPassword.Contains("nexus123"), "stored password is not plaintext on disk");
-            Check(ConnectionStore.GetPassword(reloaded[0]) ==
-                  (Environment.GetEnvironmentVariable("NEXUS_TEST_PW") ?? "nexus123"),
-                  "reloaded connection decrypts to correct password");
+            Check(!json.Contains(password) && !json.Contains("Password"), "connections.json holds no password");
+            Check(ConnectionStore.GetPassword(reloaded[0]) == password, "password comes back from the secret store");
         }
         finally
         {
-            if (backup is not null) File.WriteAllText(storePath, backup);
-            else File.Delete(storePath);
+            try { Directory.Delete(root, recursive: true); } catch { /* best effort */ }
         }
 
         var provider = Providers.ProviderRegistry.For(conn);

@@ -7,7 +7,7 @@ namespace Nexus.Services;
 /// <summary>
 /// Central profiler that records every query Nexus executes, plus queries observed on the
 /// server via pg_stat_activity. It is a process-wide singleton so all editors and connections
-/// feed the same timeline (like the Profiler window in Azure Data Studio).
+/// feed the same timeline.
 /// </summary>
 public sealed class QueryProfiler
 {

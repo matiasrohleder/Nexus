@@ -61,6 +61,8 @@ public partial class MainWindow : Window
         _vm.ShowConnectionEditor = ShowConnectionEditorAsync;
         _vm.Confirm = ShowConfirmAsync;
         _vm.PickCsvFile = PickCsvFileAsync;
+        _vm.PickExportPath = PickExportPathAsync;
+        _vm.PickImportFile = PickConnectionsFileAsync;
         _vm.Notify = message => _ = ShowNoticeAsync(message);
         _vm.PropertyChanged += OnVmPropertyChanged;
         ApplySidebarSide(_vm.SidebarOnLeft);
@@ -119,6 +121,9 @@ public partial class MainWindow : Window
         _confirmTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         ConfirmText.Text = message;
+        OverlayIcon.Kind = showCancel ? "warning" : "info";
+        OverlayIcon.Foreground = new Avalonia.Media.SolidColorBrush(
+            Avalonia.Media.Color.Parse(showCancel ? "#FBBF24" : "#60A5FA"));
         OverlayCancelButton.IsVisible = showCancel;
         OverlayOkButton.Content = showCancel ? "Confirm" : "OK";
         ConfirmOverlay.IsVisible = true;
@@ -144,6 +149,31 @@ public partial class MainWindow : Window
                 new Avalonia.Platform.Storage.FilePickerFileType("CSV files") { Patterns = new[] { "*.csv" } },
                 Avalonia.Platform.Storage.FilePickerFileTypes.All
             }
+        });
+        return files.Count > 0 ? files[0].TryGetLocalPath() : null;
+    }
+
+    private static readonly FilePickerFileType JsonFiles = new("Nexus connections (JSON)") { Patterns = new[] { "*.json" } };
+
+    private async Task<string?> PickExportPathAsync(string suggestedName)
+    {
+        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Export connections",
+            SuggestedFileName = suggestedName,
+            DefaultExtension = "json",
+            FileTypeChoices = new[] { JsonFiles }
+        });
+        return file?.TryGetLocalPath();
+    }
+
+    private async Task<string?> PickConnectionsFileAsync()
+    {
+        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Import connections",
+            AllowMultiple = false,
+            FileTypeFilter = new[] { JsonFiles, FilePickerFileTypes.All }
         });
         return files.Count > 0 ? files[0].TryGetLocalPath() : null;
     }

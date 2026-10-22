@@ -138,12 +138,12 @@ public static class BackupService
             foreach (var line in (await stderr).Split('\n', StringSplitOptions.RemoveEmptyEntries).Take(50))
                 onOutput(line);
 
-            onOutput(process.ExitCode == 0 ? "✔ Backup completed." : $"✘ Exited with code {process.ExitCode}.");
+            onOutput(process.ExitCode == 0 ? "Backup completed successfully." : $"Backup failed — exited with code {process.ExitCode}.");
             return process.ExitCode == 0;
         }
         catch (Exception ex)
         {
-            onOutput($"✘ {ex.Message}");
+            onOutput($"Backup failed: {ex.Message}");
             return false;
         }
     }

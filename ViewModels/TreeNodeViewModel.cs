@@ -24,8 +24,23 @@ public partial class TreeNodeViewModel : ObservableObject
     [ObservableProperty] private bool _isLoading;
 
     public string Name { get; }
-    public string Glyph { get; }
+    /// <summary>Line-icon key for <see cref="Controls.Icon"/> ("table", "folder"…); empty = no icon.</summary>
+    public string Icon { get; }
     public NodeKind Kind { get; }
+
+    /// <summary>Icon tint; defaults per kind so the tree reads at a glance.</summary>
+    public string IconColor { get; init; }
+
+    /// <summary>Muted text after the name (column type, nullability).</summary>
+    public string? Detail { get; init; }
+    public bool HasDetail => !string.IsNullOrEmpty(Detail);
+
+    /// <summary>Connection roots: engine badge ("Pg") + brand color, and the user's accent color.</summary>
+    public string? Badge { get; init; }
+    public string BadgeColor { get; init; } = "#3F3F46";
+    public string AccentColor { get; init; } = "Transparent";
+    public bool HasBadge => Badge is not null;
+    public bool HasIcon => Badge is null && Icon.Length > 0;
     public ObservableCollection<TreeNodeViewModel> Children { get; } = new();
 
     /// <summary>Connection this node belongs to (set for every node under a connection root).</summary>
@@ -46,11 +61,20 @@ public partial class TreeNodeViewModel : ObservableObject
         Children.Add(child);
     }
 
-    public TreeNodeViewModel(string name, string glyph, NodeKind kind, Func<TreeNodeViewModel, Task>? loader)
+    public TreeNodeViewModel(string name, string icon, NodeKind kind, Func<TreeNodeViewModel, Task>? loader)
     {
         Name = name;
-        Glyph = glyph;
+        Icon = icon;
         Kind = kind;
+        IconColor = kind switch
+        {
+            NodeKind.Database => "#60A5FA",
+            NodeKind.Schema => "#FBBF24",
+            NodeKind.Table => "#7DD3FC",
+            NodeKind.View => "#C4B5FD",
+            NodeKind.Message when icon == "warning" => "#F87171",
+            _ => "#9CA3AF"
+        };
         _loader = loader;
         if (_loader is not null)
             Children.Add(Placeholder); // gives the node an expander arrow before its real children load
@@ -74,7 +98,7 @@ public partial class TreeNodeViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            Children.Add(new TreeNodeViewModel($"Error: {ex.Message}", "⚠", NodeKind.Message, null));
+            Children.Add(new TreeNodeViewModel($"Error: {ex.Message}", "warning", NodeKind.Message, null));
         }
         finally
         {
@@ -105,7 +129,7 @@ public partial class TreeNodeViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            Children.Add(new TreeNodeViewModel($"Error: {ex.Message}", "⚠", NodeKind.Message, null));
+            Children.Add(new TreeNodeViewModel($"Error: {ex.Message}", "warning", NodeKind.Message, null));
         }
         finally
         {

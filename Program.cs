@@ -13,14 +13,18 @@ sealed class Program
     public static int Main(string[] args)
     {
         // Headless end-to-end verification of the data layer.
-        // "--selftest" = full PostgreSQL suite; "--selftest <provider>" = generic engine matrix.
+        // "--selftest" = full PostgreSQL suite; "--selftest <provider>" = generic engine matrix;
+        // "--selftest secrets" = OS keyring round-trip + connections.json secrecy checks.
         var selftestIdx = Array.IndexOf(args, "--selftest");
         if (selftestIdx >= 0)
         {
             var providerArg = args.Length > selftestIdx + 1 ? args[selftestIdx + 1] : null;
-            return providerArg is null or "postgresql"
-                ? SelfTest.RunAsync().GetAwaiter().GetResult()
-                : SelfTestMatrix.RunAsync(providerArg).GetAwaiter().GetResult();
+            return providerArg switch
+            {
+                null or "postgresql" => SelfTest.RunAsync().GetAwaiter().GetResult(),
+                "secrets" => SelfTestSecrets.Run(),
+                _ => SelfTestMatrix.RunAsync(providerArg).GetAwaiter().GetResult()
+            };
         }
 
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
@@ -31,6 +35,8 @@ sealed class Program
     public static AppBuilder BuildAvaloniaApp()
         => AppBuilder.Configure<App>()
             .UsePlatformDetect()
+            // Matches StartupWMClass in the Linux .desktop file so docks show the Nexus icon.
+            .With(new X11PlatformOptions { WmClass = "Nexus" })
 #if DEBUG
             .WithDeveloperTools()
 #endif

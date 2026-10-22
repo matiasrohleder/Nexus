@@ -19,7 +19,8 @@ public sealed class RedisProvider : IDatabaseProvider
 {
     public string Id => "redis";
     public string DisplayName => "Redis";
-    public string Glyph => "🟥";
+    public string Badge => "Rd";
+    public string BrandColor => "#DC2626";
     public int DefaultPort => 6379;
     public string DefaultUsername => "";
     public string DefaultDatabase => "0";
@@ -279,7 +280,7 @@ public sealed class RedisProvider : IDatabaseProvider
         var server = mux.GetServer(mux.GetEndPoints()[0]);
         var clients = await server.ClientListAsync();
         return clients.Select(cl => new SessionInfo(
-            cl.Id.ToString(), cl.Name.Length > 0 ? cl.Name : null, $"db{cl.Database}",
+            cl.Id.ToString(), string.IsNullOrEmpty(cl.Name) ? null : cl.Name, $"db{cl.Database}",
             cl.ClientType.ToString(), cl.LastCommand, null)).ToList();
     }
 

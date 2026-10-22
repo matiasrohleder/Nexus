@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=Nexus
+GenericName=Database Administrator
+Comment=Lightweight, cross-platform database administrator
+Exec=nexus
+Icon=nexus
+Terminal=false
+Categories=Development;Database;
+Keywords=database;sql;postgresql;mysql;mariadb;sqlserver;oracle;sqlite;duckdb;clickhouse;mongodb;redis;
+StartupWMClass=Nexus
+StartupNotify=true
