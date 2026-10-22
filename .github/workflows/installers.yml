@@ -3,9 +3,11 @@
 # with every installer attached.
 name: Installers
 
+# PRs are tested via pull_request; push only covers main (after merge) and release tags, so a
+# PR commit isn't built twice.
 on:
   push:
-    branches: ['**']
+    branches: [main]
     tags: ['v*']
   pull_request:
   workflow_dispatch:
