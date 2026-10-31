@@ -30,13 +30,13 @@
         </Border>
 
         <!-- Editable grid (columns built in code-behind from runtime schema) -->
-        <DataGrid Grid.Row="1" Name="EditGrid"
+        <DataGrid Grid.Row="1" Name="EditGrid" Classes="numbered" HeadersVisibility="All"
                   AutoGenerateColumns="False"
                   IsReadOnly="{Binding IsReadOnly}"
                   SelectedItem="{Binding SelectedRow}"
                   CanUserResizeColumns="True" CanUserSortColumns="False"
                   GridLinesVisibility="All"
-                  FontFamily="{StaticResource MonoFont}" FontSize="12" />
+                  FontFamily="{StaticResource MonoFont}" FontSize="{DynamicResource GridFontSize}" />
 
         <!-- Status -->
         <Border Grid.Row="2" Background="#252526" Padding="10 5" BorderBrush="#3F3F46" BorderThickness="0 1 0 0">

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Data.Common;
 using System.Threading;
@@ -48,7 +49,33 @@ public sealed class OracleProvider : SqlProviderBase
     public override string QuoteIdent(string ident) => $"\"{ident.Replace("\"", "\"\"")}\"";
 
     public override string BuildSelectQuery(string container, string obj, int limit, IReadOnlyList<ColumnInfo>? columns = null) =>
-        $"SELECT {ColumnList(columns)}\nFROM {QuoteIdent(container)}.{QuoteIdent(obj)}\nFETCH FIRST {limit} ROWS ONLY";
+        FormatSelect("SELECT", Qualified(container, obj), columns, $"FETCH FIRST {limit} ROWS ONLY");
+
+    protected override IdentifierCase UnquotedCase => IdentifierCase.Upper;
+
+    private static readonly HashSet<string> OracleReserved = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "ACCESS", "AUDIT", "CLUSTER", "COMMENT", "COMPRESS", "DATE", "FILE", "IDENTIFIED", "IMMEDIATE", "INCREMENT",
+        "INITIAL", "LEVEL", "LOCK", "LONG", "MAXEXTENTS", "MINUS", "MODE", "MODIFY", "NOAUDIT", "NOCOMPRESS",
+        "NUMBER", "OFFLINE", "ONLINE", "PCTFREE", "PRIOR", "PUBLIC", "RAW", "RENAME", "RESOURCE", "ROWID",
+        "ROWNUM", "SESSION", "SHARE", "SIZE", "START", "SYNONYM", "SYSDATE", "TRIGGER", "UID", "VALIDATE",
+        "VARCHAR", "VARCHAR2"
+    };
+
+    protected override bool IsReservedWord(string word) => base.IsReservedWord(word) || OracleReserved.Contains(word);
+
+    public override IReadOnlyList<string> DialectKeywords { get; } =
+    [
+        "FETCH FIRST", "ROWS ONLY", "ROWNUM", "DUAL", "CONNECT BY", "START WITH", "PRIOR", "MINUS", "MERGE INTO",
+        "VARCHAR2", "NVARCHAR2", "NUMBER", "CLOB", "BLOB", "SYSDATE", "SYSTIMESTAMP", "SEQUENCE", "NEXTVAL",
+        "CURRVAL", "PURGE", "BEGIN", "DECLARE", "EXCEPTION", "PACKAGE", "PROCEDURE"
+    ];
+
+    public override IReadOnlyList<string> DialectFunctions { get; } =
+    [
+        "NVL", "NVL2", "DECODE", "TO_CHAR", "TO_DATE", "TO_NUMBER", "TRUNC", "ADD_MONTHS", "MONTHS_BETWEEN",
+        "LISTAGG", "INSTR", "SUBSTR", "REGEXP_LIKE", "REGEXP_SUBSTR", "SYS_GUID", "ROW_NUMBER", "RANK"
+    ];
 
     /// <summary>Oracle schemas are users; dropping one requires CASCADE when it owns objects.</summary>
     public override string? BuildDropContainerSql(string container, bool cascade) =>

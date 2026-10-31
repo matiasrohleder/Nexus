@@ -15,13 +15,18 @@ namespace Nexus.ViewModels;
 public partial class MainWindowViewModel : ViewModelBase
 {
     private readonly ConnectionStore _store = new();
-    private readonly AppSettings _settings = AppSettings.Load();
+    private readonly AppSettings _settings = AppSettings.Current;
+
+    /// <summary>Connection root nodes by profile Id. Reused across tree rebuilds (folders/reorder), so
+    /// expanded state and loaded children survive moving a connection.</summary>
+    private readonly Dictionary<Guid, TreeNodeViewModel> _roots = new();
     private int _queryCounter;
 
     /// <summary>True = sidebar on the left, false = on the right. Persisted across sessions.</summary>
     [ObservableProperty] private bool _sidebarOnLeft = true;
 
     public ObservableCollection<SavedConnection> Connections { get; } = new();
+    /// <summary>Explorer top level: folder nodes (in user order) then ungrouped connection roots.</summary>
     public ObservableCollection<TreeNodeViewModel> ConnectionNodes { get; } = new();
     public ObservableCollection<DocumentViewModel> Documents { get; } = new();
     public ProfilerViewModel Profiler { get; } = new();
@@ -53,6 +58,9 @@ public partial class MainWindowViewModel : ViewModelBase
     /// <summary>Wired by the View: open-file picker for an exported connections JSON → path or null.</summary>
     public Func<Task<string?>>? PickImportFile { get; set; }
 
+    /// <summary>Wired by the View: text prompt (message, initial text, suggestions) → text or null if cancelled.</summary>
+    public Func<string, string, IReadOnlyList<string>, Task<string?>>? Prompt { get; set; }
+
     /// <summary>Wired by the View: shows a transient notice (import results etc.).</summary>
     public Action<string>? Notify { get; set; }
 
@@ -65,8 +73,9 @@ public partial class MainWindowViewModel : ViewModelBase
         foreach (var c in _store.Load())
         {
             Connections.Add(c);
-            ConnectionNodes.Add(BuildConnectionNode(c));
+            _roots[c.Id] = BuildConnectionNode(c);
         }
+        RebuildTree();
         SyncProfilerConnections();
 
         // Providers report opens/closes from worker threads (tree, query tabs, admin panel…).
@@ -75,7 +84,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
     private void SyncConnectionStatus(Guid id)
     {
-        foreach (var root in ConnectionNodes.Where(n => n.Connection?.Id == id))
+        if (_roots.TryGetValue(id, out var root))
         {
             root.IsConnected = ConnectionStatus.IsConnected(id);
             if (root.IsConnected) root.HasConnectError = false;
@@ -86,7 +95,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private TreeNodeViewModel? RootOf(TreeNodeViewModel? node) =>
         node is { IsConnection: true }
             ? node
-            : ConnectionNodes.FirstOrDefault(n => n.Connection?.Id == node?.Connection?.Id);
+            : node?.Connection is { } c && _roots.TryGetValue(c.Id, out var root) ? root : null;
 
     // ---- Object explorer node factory --------------------------------------------------
 
@@ -220,8 +229,11 @@ public partial class MainWindowViewModel : ViewModelBase
         if (await ShowConnectionEditor(vm))
         {
             var saved = vm.Commit();
+            // New connections land in the folder that's selected (or holds the selected connection).
+            saved.Folder ??= SelectedFolderName();
             Connections.Add(saved);
-            ConnectionNodes.Add(BuildConnectionNode(saved));
+            _roots[saved.Id] = BuildConnectionNode(saved);
+            RebuildTree();
             _store.SaveAll(Connections);
             SyncProfilerConnections();
         }
@@ -247,7 +259,8 @@ public partial class MainWindowViewModel : ViewModelBase
             if (index >= 0)
             {
                 Connections[index] = updated;
-                ConnectionNodes[index] = BuildConnectionNode(updated);
+                _roots[updated.Id] = BuildConnectionNode(updated);
+                RebuildTree();
             }
             _store.SaveAll(Connections);
             SyncProfilerConnections();
@@ -270,7 +283,8 @@ public partial class MainWindowViewModel : ViewModelBase
 
         await ProviderRegistry.For(connection).DisconnectAsync(connection);
         Connections.RemoveAt(index);
-        ConnectionNodes.RemoveAt(index);
+        _roots.Remove(connection.Id);
+        RebuildTree();
         ConnectionStore.ForgetPassword(connection);
         _store.SaveAll(Connections);
         SyncProfilerConnections();
@@ -328,16 +342,17 @@ public partial class MainWindowViewModel : ViewModelBase
             {
                 var index = Connections.IndexOf(existing);
                 Connections[index] = c;
-                ConnectionNodes[index] = BuildConnectionNode(c);
+                _roots[c.Id] = BuildConnectionNode(c);
                 updated++;
             }
             else
             {
                 Connections.Add(c);
-                ConnectionNodes.Add(BuildConnectionNode(c));
+                _roots[c.Id] = BuildConnectionNode(c);
                 added++;
             }
         }
+        RebuildTree();
         _store.SaveAll(Connections);
         SyncProfilerConnections();
 
@@ -431,6 +446,260 @@ public partial class MainWindowViewModel : ViewModelBase
         await node.ReloadAsync();
     }
 
+    /// <summary>Collapses every node of the explorer. Nothing disconnects; children stay loaded.</summary>
+    [RelayCommand]
+    private void CollapseAll()
+    {
+        static void Collapse(TreeNodeViewModel n)
+        {
+            foreach (var child in n.Children) Collapse(child);
+            n.IsExpanded = false;
+        }
+        foreach (var n in ConnectionNodes) Collapse(n);
+    }
+
+    // ---- Font size (editor + grids) ------------------------------------------------------
+
+    [RelayCommand] private void ZoomIn() => UiFonts.ChangeAll(1);
+    [RelayCommand] private void ZoomOut() => UiFonts.ChangeAll(-1);
+    [RelayCommand] private void ZoomReset() => UiFonts.Reset();
+
+    // ---- Folders and ordering ----------------------------------------------------------
+    // Order = order of Connections (persisted in connections.json); folders and their order live
+    // in settings.json. Every change rebuilds the top level from those two, reusing the root nodes.
+
+    /// <summary>Folder names in display order, including folders only referenced by a connection.</summary>
+    public IReadOnlyList<string> FolderNames =>
+        _settings.Folders.Concat(Connections.Select(c => c.Folder).OfType<string>())
+            .Distinct(StringComparer.Ordinal).ToList();
+
+    private void RebuildTree()
+    {
+        var selected = SelectedNode;
+        var folders = FolderNames;
+        if (!folders.SequenceEqual(_settings.Folders))
+        {
+            _settings.Folders = folders.ToList();
+            _settings.Save();
+        }
+
+        foreach (var old in ConnectionNodes.Where(n => n.IsFolder))
+            old.Children.Clear();
+        ConnectionNodes.Clear();
+
+        foreach (var name in folders)
+        {
+            var folder = new TreeNodeViewModel(name, "folder", NodeKind.Folder, null)
+            {
+                IsExpanded = !_settings.CollapsedFolders.Contains(name)
+            };
+            foreach (var c in Connections.Where(c => c.Folder == name))
+                if (_roots.TryGetValue(c.Id, out var root)) folder.AddChild(root);
+            folder.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName != nameof(TreeNodeViewModel.IsExpanded)) return;
+                _settings.CollapsedFolders.Remove(name);
+                if (!folder.IsExpanded) _settings.CollapsedFolders.Add(name);
+                _settings.Save();
+            };
+            ConnectionNodes.Add(folder);
+        }
+        foreach (var c in Connections.Where(c => c.Folder is null))
+            if (_roots.TryGetValue(c.Id, out var root))
+            {
+                root.Parent = null;
+                ConnectionNodes.Add(root);
+            }
+
+        SelectedNode = selected is { IsFolder: true }
+            ? ConnectionNodes.FirstOrDefault(n => n.IsFolder && n.Name == selected.Name)
+            : selected;
+    }
+
+    private string? SelectedFolderName() =>
+        SelectedNode is { IsFolder: true } f ? f.Name
+        : ResolveSaved(SelectedNode?.Connection)?.Folder;
+
+    private void SaveOrder()
+    {
+        _store.SaveAll(Connections);
+        SyncProfilerConnections();
+        RebuildTree();
+    }
+
+    [RelayCommand]
+    private async Task NewFolderAsync()
+    {
+        if (Prompt is null) return;
+        var name = (await Prompt("New folder name:", "", Array.Empty<string>()))?.Trim();
+        if (string.IsNullOrEmpty(name)) return;
+        if (FolderNames.Contains(name))
+        {
+            Notify?.Invoke($"A folder named \"{name}\" already exists.");
+            return;
+        }
+        _settings.Folders.Add(name);
+        _settings.Save();
+        RebuildTree();
+    }
+
+    [RelayCommand]
+    private async Task RenameFolderAsync(TreeNodeViewModel? node)
+    {
+        node ??= SelectedNode;
+        if (node is not { IsFolder: true } || Prompt is null) return;
+        var oldName = node.Name;
+        var name = (await Prompt($"Rename folder \"{oldName}\" to:", oldName, Array.Empty<string>()))?.Trim();
+        if (string.IsNullOrEmpty(name) || name == oldName) return;
+        if (FolderNames.Contains(name))
+        {
+            Notify?.Invoke($"A folder named \"{name}\" already exists.");
+            return;
+        }
+
+        var i = _settings.Folders.IndexOf(oldName);
+        if (i >= 0) _settings.Folders[i] = name;
+        if (_settings.CollapsedFolders.Remove(oldName)) _settings.CollapsedFolders.Add(name);
+        foreach (var c in Connections.Where(c => c.Folder == oldName)) c.Folder = name;
+        _settings.Save();
+        SaveOrder();
+    }
+
+    /// <summary>Removes the folder; its connections move to the top level (nothing is deleted).</summary>
+    [RelayCommand]
+    private void DeleteFolder(TreeNodeViewModel? node)
+    {
+        node ??= SelectedNode;
+        if (node is not { IsFolder: true }) return;
+        var name = node.Name;
+        _settings.Folders.Remove(name);
+        _settings.CollapsedFolders.Remove(name);
+        foreach (var c in Connections.Where(c => c.Folder == name)) c.Folder = null;
+        _settings.Save();
+        SaveOrder();
+    }
+
+    [RelayCommand]
+    private async Task MoveToFolderAsync(TreeNodeViewModel? node)
+    {
+        node ??= SelectedNode;
+        var connection = node is { IsConnection: true } ? ResolveSaved(node.Connection) : null;
+        if (connection is null || Prompt is null) return;
+
+        var name = await Prompt("Move to folder (type a new name to create it; leave empty for the top level):",
+            connection.Folder ?? "", FolderNames);
+        if (name is null) return;
+        name = name.Trim();
+        if (name.Length > 0 && !_settings.Folders.Contains(name))
+        {
+            _settings.Folders.Add(name);
+            _settings.CollapsedFolders.Remove(name);
+            _settings.Save();
+        }
+        connection.Folder = name.Length == 0 ? null : name;
+        // Append to the end of its new group.
+        Connections.Remove(connection);
+        Connections.Add(connection);
+        SaveOrder();
+    }
+
+    [RelayCommand]
+    private void MoveUp(TreeNodeViewModel? node) => MoveBy(node ?? SelectedNode, -1);
+
+    [RelayCommand]
+    private void MoveDown(TreeNodeViewModel? node) => MoveBy(node ?? SelectedNode, +1);
+
+    /// <summary>Swaps a connection with its neighbour inside its folder, or a folder with the adjacent folder.</summary>
+    private void MoveBy(TreeNodeViewModel? node, int step)
+    {
+        if (node is { IsFolder: true })
+        {
+            var folders = _settings.Folders;
+            int i = folders.IndexOf(node.Name), j = i + step;
+            if (i < 0 || j < 0 || j >= folders.Count) return;
+            (folders[i], folders[j]) = (folders[j], folders[i]);
+            _settings.Save();
+            RebuildTree();
+            return;
+        }
+
+        var connection = node is { IsConnection: true } ? ResolveSaved(node.Connection) : null;
+        if (connection is null) return;
+        var siblings = Connections.Where(c => c.Folder == connection.Folder).ToList();
+        int k = siblings.IndexOf(connection);
+        if (k + step < 0 || k + step >= siblings.Count) return;
+        var other = siblings[k + step];
+        int a = Connections.IndexOf(connection), b = Connections.IndexOf(other);
+        Connections.Move(a, b);
+        SaveOrder();
+        SelectedNode = _roots.GetValueOrDefault(connection.Id);
+    }
+
+    /// <summary>
+    /// Validates a drag-and-drop target and normalizes where the dragged node would land
+    /// (<see cref="DropPosition.None"/> = not allowed). <paramref name="target"/> null = empty space.
+    /// </summary>
+    public DropPosition ResolveDrop(TreeNodeViewModel dragged, TreeNodeViewModel? target, DropPosition wanted)
+    {
+        if (target == dragged) return DropPosition.None;
+        if (dragged.IsConnection)
+        {
+            if (target is null) return DropPosition.After;          // top level, end
+            if (target.IsFolder) return DropPosition.Into;
+            return target.IsConnection ? (wanted == DropPosition.Before ? DropPosition.Before : DropPosition.After) : DropPosition.None;
+        }
+        if (dragged.IsFolder)
+        {
+            if (target is null) return DropPosition.After;
+            if (target.IsFolder) return wanted == DropPosition.Before ? DropPosition.Before : DropPosition.After;
+            return DropPosition.None;
+        }
+        return DropPosition.None;
+    }
+
+    /// <summary>Applies a drop computed by <see cref="ResolveDrop"/> (explorer drag and drop).</summary>
+    public void MoveNode(TreeNodeViewModel dragged, TreeNodeViewModel? target, DropPosition position)
+    {
+        position = ResolveDrop(dragged, target, position);
+        if (position == DropPosition.None) return;
+
+        if (dragged.IsFolder)
+        {
+            var folders = _settings.Folders;
+            folders.Remove(dragged.Name);
+            int at = target is null ? folders.Count : folders.IndexOf(target.Name) + (position == DropPosition.After ? 1 : 0);
+            folders.Insert(Math.Clamp(at, 0, folders.Count), dragged.Name);
+            _settings.Save();
+            RebuildTree();
+            return;
+        }
+
+        var connection = ResolveSaved(dragged.Connection);
+        if (connection is null) return;
+        Connections.Remove(connection);
+
+        if (target is null)
+        {
+            connection.Folder = null;
+            Connections.Add(connection);
+        }
+        else if (target.IsFolder)
+        {
+            connection.Folder = target.Name;
+            Connections.Add(connection);
+            target.IsExpanded = true;
+        }
+        else
+        {
+            var anchor = ResolveSaved(target.Connection)!;
+            connection.Folder = anchor.Folder;
+            int at = Connections.IndexOf(anchor) + (position == DropPosition.After ? 1 : 0);
+            Connections.Insert(at, connection);
+        }
+        SaveOrder();
+        SelectedNode = _roots.GetValueOrDefault(connection.Id);
+    }
+
     // ---- Query commands ----------------------------------------------------------------
 
     [RelayCommand]
@@ -455,8 +724,14 @@ public partial class MainWindowViewModel : ViewModelBase
             SelectedDocument = Documents.ElementAtOrDefault(Math.Min(index, Documents.Count - 1));
     }
 
+    /// <summary>"Select Top 1000 Rows" (also double-click on a table).</summary>
     [RelayCommand]
-    private async Task OpenTableAsync(TreeNodeViewModel? node)
+    private Task OpenTableAsync(TreeNodeViewModel? node) => OpenTableTopAsync(node, 1000);
+
+    [RelayCommand]
+    private Task OpenTableTop200Async(TreeNodeViewModel? node) => OpenTableTopAsync(node, 200);
+
+    private async Task OpenTableTopAsync(TreeNodeViewModel? node, int limit)
     {
         if (node is null || !node.IsQueryable || node.Connection is null) return;
 
@@ -467,7 +742,7 @@ public partial class MainWindowViewModel : ViewModelBase
         try { columns = await provider.GetColumnsAsync(node.Connection, node.Schema!, node.Table!); }
         catch { /* fall back to SELECT * */ }
 
-        var sql = provider.BuildSelectQuery(node.Schema!, node.Table!, 100, columns);
+        var sql = provider.BuildSelectQuery(node.Schema!, node.Table!, limit, columns);
 
         // Bind the saved profile (so the Connection combo resolves) and pin the node's database.
         var saved = ResolveSaved(node.Connection) ?? node.Connection;

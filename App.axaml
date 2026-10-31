@@ -3,6 +3,7 @@
              x:Class="Nexus.App"
              xmlns:local="using:Nexus"
              xmlns:c="using:Nexus.Controls"
+             xmlns:cc="using:AvaloniaEdit.CodeCompletion"
              Name="Nexus"
              RequestedThemeVariant="Dark">
 
@@ -16,6 +17,9 @@
     <Application.Resources>
         <!-- Bundled so the editor and grids look identical on every OS (SIL OFL, see Assets/Fonts) -->
         <FontFamily x:Key="MonoFont">avares://Nexus/Assets/Fonts#JetBrains Mono</FontFamily>
+        <!-- User-adjustable (Services/UiFonts overwrites these from settings.json at startup) -->
+        <x:Double x:Key="EditorFontSize">14</x:Double>
+        <x:Double x:Key="GridFontSize">12</x:Double>
     </Application.Resources>
 
     <Application.DataTemplates>
@@ -90,7 +94,7 @@
         <Style Selector="DataGridColumnHeader">
             <Setter Property="Background" Value="#2D2D30" />
             <Setter Property="Foreground" Value="#D4D4D8" />
-            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontSize" Value="{DynamicResource GridFontSize}" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Padding" Value="10 0" />
             <Setter Property="MinHeight" Value="30" />
@@ -105,6 +109,31 @@
         </Style>
         <Style Selector="DataGrid /template/ Rectangle#PART_ColumnHeadersAndRowsSeparator">
             <Setter Property="Fill" Value="#3F3F46" />
+        </Style>
+
+        <!-- Row numbers in result/data grids -->
+        <Style Selector="DataGrid.numbered DataGridRowHeader">
+            <Setter Property="Foreground" Value="#7A7A80" />
+            <Setter Property="Background" Value="#252526" />
+            <Setter Property="FontSize" Value="{DynamicResource GridFontSize}" />
+            <Setter Property="Padding" Value="8 0 6 0" />
+            <Setter Property="HorizontalContentAlignment" Value="Right" />
+            <Setter Property="MinWidth" Value="36" />
+        </Style>
+
+        <!-- Splitters: thin line, accent on hover so they're easy to find and grab -->
+        <Style Selector="GridSplitter">
+            <Setter Property="Background" Value="#2B2B2F" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+        </Style>
+        <Style Selector="GridSplitter:pointerover">
+            <Setter Property="Background" Value="#3B82F6" />
+        </Style>
+
+        <!-- Completion popup -->
+        <Style Selector="cc|CompletionList">
+            <Setter Property="FontSize" Value="{DynamicResource EditorFontSize}" />
         </Style>
 
         <Style Selector="MenuItem c|Icon">

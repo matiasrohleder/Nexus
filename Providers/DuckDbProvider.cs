@@ -36,7 +36,19 @@ public sealed class DuckDbProvider : SqlProviderBase
     public override string QuoteIdent(string ident) => $"\"{ident.Replace("\"", "\"\"")}\"";
 
     public override string BuildSelectQuery(string container, string obj, int limit, IReadOnlyList<ColumnInfo>? columns = null) =>
-        $"SELECT {ColumnList(columns)}\nFROM {QuoteIdent(container)}.{QuoteIdent(obj)}\nLIMIT {limit};";
+        FormatSelect("SELECT", Qualified(container, obj), columns, $"LIMIT {limit};");
+
+    public override IReadOnlyList<string> DialectKeywords { get; } =
+    [
+        "ILIKE", "QUALIFY", "SAMPLE", "PIVOT", "UNPIVOT", "EXCLUDE", "REPLACE", "COLUMNS", "ASOF JOIN",
+        "POSITIONAL JOIN", "DESCRIBE", "SUMMARIZE", "COPY", "EXPORT DATABASE", "INSTALL", "LOAD", "STRUCT", "LIST", "MAP"
+    ];
+
+    public override IReadOnlyList<string> DialectFunctions { get; } =
+    [
+        "READ_CSV", "READ_CSV_AUTO", "READ_PARQUET", "READ_JSON", "NOW", "DATE_TRUNC", "STRFTIME", "STRPTIME",
+        "LIST_AGG", "STRING_AGG", "ARRAY_AGG", "UNNEST", "REGEXP_MATCHES", "EPOCH", "GENERATE_SERIES", "RANGE"
+    ];
 
     public override async Task<(bool ok, string message)> TestConnectionAsync(SavedConnection c, CancellationToken ct = default)
     {

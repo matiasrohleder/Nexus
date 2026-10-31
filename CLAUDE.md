@@ -130,8 +130,27 @@ driver. Key ideas that span multiple files:
 - `SavedConnection` equality is by `Id`, so database-pinned clones match their profile in
   pickers and `IndexOf`.
 - **Singletons**: `QueryProfiler.Instance` (all query logging; UI-thread marshalled unless
-  `DirectDispatch`), `QueryHistoryStore.Instance`, `SchemaCache` (autocomplete words per
-  connection; invalidate on tree refresh).
+  `DirectDispatch`), `QueryHistoryStore.Instance`, `SchemaCache` (per connection+database
+  `SchemaSnapshot`: containers/objects up front, columns on demand; invalidate on tree refresh),
+  `AppSettings.Current` (always use it — separate `Load()`ed copies would overwrite each other).
+- **Query editor language** (`Services/SqlLanguage` lexer → `SqlCompletion` + `Views/QueryColorizer`):
+  one forgiving tokenizer feeds both highlighting and context-aware completion. Providers add
+  `DialectKeywords`/`DialectFunctions` and `QueryLanguage` ("sql"/"mongo"/"redis"); no
+  TextMate/native deps. Completion inserts names via `IDatabaseProvider.Ident` (quotes only when
+  needed: odd chars, reserved words, or case the engine would fold — `UnquotedCase`).
+  `SchemaCache.Changed` redraws editors; after `Invalidate` views use `TryGet` (an eager `Get`
+  would reconnect a connection the user just disconnected).
+- **Generated SELECTs** (`SqlProviderBase.FormatSelect`): `SELECT` alone, one column per line
+  indented 4 spaces, `FROM`, then the dialect limit (`SELECT TOP (n)` on SQL Server).
+- **Explorer folders/order**: order = order of `Connections` (connections.json);
+  `SavedConnection.Folder` names its folder; folder list/order + collapsed state live in
+  `settings.json` (`AppSettings.Folders`/`CollapsedFolders`). `ConnectionNodes` is only the
+  top level (folders, then ungrouped roots) and is rebuilt by `RebuildTree()` from those, reusing
+  connection root nodes from `_roots` (by Id) so expansion/loaded children survive. Never index
+  `ConnectionNodes` in parallel with `Connections`. Drag and drop: `MainWindow` code-behind →
+  `ResolveDrop`/`MoveNode`.
+- **Font sizes**: `UiFonts` writes the `EditorFontSize`/`GridFontSize` app resources (bind with
+  `DynamicResource`) and persists them.
 
 ### Avalonia gotchas specific to this repo
 
@@ -144,6 +163,8 @@ driver. Key ideas that span multiple files:
   longer propagates to it in Avalonia 12 (the context menu then acted on a stale node).
 - The explorer context menu shows items per node kind via flags on `TreeNodeViewModel`
   (`IsQueryable`, `IsTable`, `CanDrop`, `CanOpenQuery`…); add new actions the same way.
+- A `GridSplitter` must sit between two resizable (star/pixel) rows; next to an `Auto` row it
+  resizes that row instead (the query/results splitter used to border the error banner).
 - Don't put `Padding` on a `ScrollViewer`: it isn't subtracted when measuring the content, so
   wide children overflow. Use a `Margin` on the content instead.
 - A transparent `Background` still hit-tests: an empty control layered over another (e.g. the
@@ -187,8 +208,10 @@ Don't hardcode the version anywhere else.
 - New query tabs start **empty**; the **profiler starts off** (opt-in).
 - Connections **start disconnected** and connect only when the user expands them; right-click
   offers Connect/Disconnect, and a dot shows the state (gray hollow / green / red).
-- "View Data" generates an **explicit, line-broken column list** (one column per line, dialect
-  LIMIT/TOP/FETCH), falling back to `*` only if introspection fails.
+- "Select Top 1000 Rows" (default, also double-click) and "Select Top 200 Rows" generate an
+  **explicit, line-broken column list** (one column per line, dialect LIMIT/TOP/FETCH), falling
+  back to `*` only if introspection fails.
+- Result/data grids show **row numbers** and the results toolbar a row count.
 - Query errors must be loud: red selectable banner above results + Messages tab + status.
 - Run = F5 **and** Ctrl+Enter. Selection-aware (runs highlighted text if any).
 
@@ -200,15 +223,13 @@ Pending work, roughly in priority order:
    and a Restore section in the Server panel).
 2. **User management actions** — create/drop user, change password (Server panel lists users
    read-only today).
-3. **Per-dialect syntax highlighting** via `AvaloniaEdit.TextMate` (current highlighting is the
-   built-in generic SQL definition; Mongo/Redis tabs get no highlighting).
-4. **EXPLAIN for SQL Server and Oracle** (need `SHOWPLAN`/`PLAN_TABLE` flows, not a statement
+3. **EXPLAIN for SQL Server and Oracle** (need `SHOWPLAN`/`PLAN_TABLE` flows, not a statement
    prefix; `SupportsExplain=false` today).
-5. **Window state persistence** (size/position/splitter widths in `AppSettings`) and a
+4. **Window state persistence** (size/position/splitter widths in `AppSettings`) and a
    light-theme toggle.
-6. **Code signing**: buy/configure a Windows Authenticode cert and an Apple Developer ID so the
+5. **Code signing**: buy/configure a Windows Authenticode cert and an Apple Developer ID so the
    installers open without SmartScreen/Gatekeeper prompts (the scripts already accept them).
-7. **CSV import for ClickHouse** (fails today — no transactions; needs a batch INSERT path).
-8. **Result grid virtualization / paging beyond the 10k row cap** for very wide result sets.
-9. **CI for the engine matrix**: the installers workflow covers SQLite/DuckDB/secrets; add the
+6. **CSV import for ClickHouse** (fails today — no transactions; needs a batch INSERT path).
+7. **Result grid virtualization / paging beyond the 10k row cap** for very wide result sets.
+8. **CI for the engine matrix**: the installers workflow covers SQLite/DuckDB/secrets; add the
    Docker engines (`--selftest` loop), Oracle gated behind a flag because of its size.

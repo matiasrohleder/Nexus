@@ -41,6 +41,9 @@ public sealed class QueryResult
     /// <summary>Rows affected for non-SELECT statements (-1 when not applicable).</summary>
     public int RecordsAffected { get; set; } = -1;
 
+    /// <summary>True when the reader stopped at the per-result row cap (more rows exist).</summary>
+    public bool IsTruncated { get; set; }
+
     public double DurationMs { get; set; }
     public string? Error { get; set; }
 

@@ -18,6 +18,7 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        Services.UiFonts.Apply();
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             desktop.MainWindow = new MainWindow

@@ -43,7 +43,20 @@ public sealed class ClickHouseProvider : SqlProviderBase
     public override string QuoteIdent(string ident) => $"`{ident.Replace("`", "\\`")}`";
 
     public override string BuildSelectQuery(string container, string obj, int limit, IReadOnlyList<ColumnInfo>? columns = null) =>
-        $"SELECT {ColumnList(columns)}\nFROM {QuoteIdent(container)}.{QuoteIdent(obj)}\nLIMIT {limit};";
+        FormatSelect("SELECT", Qualified(container, obj), columns, $"LIMIT {limit};");
+
+    public override IReadOnlyList<string> DialectKeywords { get; } =
+    [
+        "FINAL", "PREWHERE", "SAMPLE", "ARRAY JOIN", "GLOBAL", "ENGINE", "MergeTree", "ReplacingMergeTree",
+        "PARTITION BY", "TTL", "SETTINGS", "FORMAT", "LIMIT BY", "WITH TOTALS", "OPTIMIZE TABLE", "SYSTEM"
+    ];
+
+    public override IReadOnlyList<string> DialectFunctions { get; } =
+    [
+        "now", "today", "toDate", "toDateTime", "toStartOfDay", "toStartOfMonth", "toYYYYMM", "formatDateTime",
+        "uniq", "uniqExact", "groupArray", "arrayJoin", "countIf", "sumIf", "avgIf", "argMax", "argMin",
+        "quantile", "toString", "toInt64", "toFloat64", "JSONExtractString", "any", "anyLast", "if", "multiIf"
+    ];
 
     public override string? BuildDropContainerSql(string container, bool cascade) =>
         $"DROP DATABASE {QuoteIdent(container)}";

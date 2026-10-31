@@ -34,18 +34,26 @@ transactions with rollback.
 - Redesigned dialog: engine tiles, **smart defaults per engine** (port/user/database),
   **paste a URL** (`postgres://user:pass@host/db`, `mongodb://…`, ADO.NET strings) to auto-fill,
   file picker for SQLite/DuckDB, color swatches, Enter = Test.
+- **Folders** and custom order in the explorer: drag and drop, or right-click › Move Up/Down /
+  Move to Folder…; **Collapse all** button in the sidebar header.
 
 ### Query editor
-- Multi-tab, syntax highlighting, line numbers; **F5 / Ctrl+Enter** runs (selection-aware).
+- Multi-tab, line numbers; **F5 / Ctrl+Enter** runs (selection-aware).
+- **Schema-aware highlighting** (VS Code Dark+ colors): keywords, functions, strings, numbers,
+  comments, and your tables/columns in their own colors. Mongo and Redis tabs too.
+- **Autocomplete as you type** (or Ctrl+Space), by context: tables after `FROM`/`JOIN`, columns
+  of the tables in the query in `SELECT`/`WHERE`/`ORDER BY`, `alias.` → that table's columns,
+  per-dialect keywords and functions (`OR` → `ORDER BY`).
 - **Stop button** — real query cancellation.
-- **Ctrl+Space autocomplete** — SQL keywords + your schemas/tables/columns.
+- Numbered result rows with a row count; **font size** via Ctrl+= / Ctrl+- / Ctrl+0 or
+  Ctrl+mouse wheel (editor and grids).
 - **EXPLAIN** button (engines that support it), export results to **CSV/JSON**,
   open/save **.sql** files (Ctrl+O/Ctrl+S), results capped at 10 000 rows to protect memory.
 
 ### Administration
 - **Edit Data** grid: insert/update/delete rows with PK detection, committed in one
   transaction (all-or-nothing); tables without a PK open read-only.
-- Object explorer context menu: View Data, Edit Data, **View DDL**, **Import CSV**,
+- Object explorer context menu: Select Top 1000 / Top 200 Rows, Edit Data, **View DDL**, **Import CSV**,
   Truncate, Drop (with confirmation).
 - **Server panel** per connection: active sessions + **Kill**, users/roles, table sizes,
   server variables (filterable), **Backup** (runs the engine's tool if installed — pg_dump,
@@ -190,7 +198,8 @@ Providers/   IDatabaseProvider (capability-based contract) · SqlProviderBase (s
              Postgres · MySql/MariaDb · SqlServer · Oracle · Sqlite · DuckDb · ClickHouse
              Mongo (mongosh-style parser) · Redis (command tokenizer + INSPECT)
 Services/    SecretStore (OS keyrings) · ConnectionStore · QueryProfiler · QueryHistoryStore
-             SchemaCache (autocomplete) · CsvService · BackupService · AppSettings
+             SqlLanguage (lexer) · SqlCompletion · SchemaCache · CsvService · BackupService
+             AppSettings · UiFonts
 ViewModels/  MainWindow · ConnectionEditor · QueryDocument · TableEditor · ServerAdmin · Profiler
 Views/       Avalonia XAML (dark, IDE-style; sidebar dockable left/right)
 ```
