@@ -30,6 +30,7 @@ public partial class MainWindowViewModel : ViewModelBase
     public ObservableCollection<TreeNodeViewModel> ConnectionNodes { get; } = new();
     public ObservableCollection<DocumentViewModel> Documents { get; } = new();
     public ProfilerViewModel Profiler { get; } = new();
+    public UpdateViewModel Updates { get; } = new();
 
     public ObservableCollection<Services.HistoryEntry> History => Services.QueryHistoryStore.Instance.History;
     public ObservableCollection<Services.Snippet> Snippets => Services.QueryHistoryStore.Instance.Snippets;

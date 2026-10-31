@@ -20,8 +20,8 @@ python3 packaging/generate-icons.py   # regenerate every icon format from code (
 ```
 
 `.github/workflows/installers.yml` builds all installers on every push, really installs them on
-Windows/macOS/Ubuntu (+ Fedora/Debian containers) and runs `--selftest sqlite|duckdb|secrets`
-against the installed app. A tag `v<Version>` publishes a GitHub Release.
+Windows/macOS/Ubuntu (+ Fedora/Debian containers) and runs `--selftest sqlite|duckdb|secrets|updater`
+against the installed app (updater re-applies the built package through the in-app update path). A tag `v<Version>` publishes a GitHub Release.
 
 ### Tests (self-test matrix against real databases)
 
@@ -40,6 +40,12 @@ NEXUS_TEST_FILE=/tmp/t.db dotnet run -- --selftest sqlite    # file-based engine
 
 # OS keyring round-trip, legacy migration, and "connections.json has no secrets"
 dotnet run -- --selftest secrets
+
+# Self-updater: version order, release parsing, asset names, checksums, live feed (info only).
+# NEXUS_EXPECT_INSTALL=windows|macos|deb|rpm|tarball|manual asserts the detected install kind;
+# NEXUS_UPDATE_APPLY=<package> installs it over this copy (latest = download from the feed);
+# NEXUS_UPDATE_FEED=<url> replaces the GitHub releases/latest URL (fake releases for testing).
+dotnet run -- --selftest updater
 ```
 
 Self-tests must never touch the user's real data: they call `SecretStore.UseEphemeral()` (engine
@@ -127,6 +133,17 @@ driver. Key ideas that span multiple files:
   (driver `ClearPool` per opened profile incl. pinned clones; Mongo unregisters its cluster —
   `MongoClient.Dispose` doesn't). The tree shows a status dot per connection
   (`TreeNodeViewModel.IsConnected`/`HasConnectError`), synced from `ConnectionStatus.Changed`.
+- **Self-update** (`Services/Updater` + `UpdateViewModel`, overlay in `MainWindow`): reads
+  GitHub `releases/latest`, compares semver with `AppInfo.Version`, and picks the asset by
+  `InstallKind`, detected from `AppContext.BaseDirectory` (Inno `unins000.exe`, `.app` bundle,
+  `/opt/nexus` owned by dpkg/rpm, `$XDG_DATA_HOME/nexus/app` = tarball, else `Manual` → release
+  page). Downloads are verified against the asset's GitHub `digest` (fallback `SHA256SUMS.txt`).
+  Install goes through the platform's own upgrade path — Inno `/SILENT /RELAUNCH=1` (nexus.iss
+  relaunches), `.app` swap via `ditto`, `pkexec apt-get|dnf|zypper install`, tarball
+  `install.sh` — so the OS keeps seeing one package. After installing, files of the running
+  version may already be replaced: always relaunch (`RelaunchAfterExit`, waits for our PID) and
+  quit immediately. **Asset names are a contract** with `AssetNameFor`: renaming installers in the
+  packaging scripts breaks updates for every installed copy.
 - `SavedConnection` equality is by `Id`, so database-pinned clones match their profile in
   pickers and `IndexOf`.
 - **Singletons**: `QueryProfiler.Instance` (all query logging; UI-thread marshalled unless
@@ -193,7 +210,8 @@ and inject into the VM.
 
 ## Versioning
 
-Semantic versioning starting at **0.1.0** (0.2.0 = OS keyring + installers; 0.3.0 = connect/disconnect + explorer fixes). The single source of truth is `<Version>` in
+Semantic versioning starting at **0.1.0** (0.2.0 = OS keyring + installers; 0.3.0 = connect/disconnect + explorer fixes; 0.4.0 = SQL
+completion/highlighting, responsive grids, self-update). The single source of truth is `<Version>` in
 `Nexus.csproj`; `Services/AppInfo.cs` reads it from the assembly at runtime and the top bar
 renders it as "Nexus — {version}" (`MainWindowViewModel.VersionText`); the packaging scripts
 read it from the csproj too. To release: bump `<Version>`, commit, push tag `v<Version>`.
@@ -214,6 +232,9 @@ Don't hardcode the version anywhere else.
 - Result/data grids show **row numbers** and the results toolbar a row count.
 - Query errors must be loud: red selectable banner above results + Messages tab + status.
 - Run = F5 **and** Ctrl+Enter. Selection-aware (runs highlighted text if any).
+- Updates: checked on startup (opt-out checkbox in the dialog, `AppSettings.CheckForUpdatesOnStartup`),
+  manual "Check for updates…" in the ⋯ menu, "Skip this version" silences only the startup prompt,
+  and a top-bar "Update to x.y.z" badge stays while an update is pending. Never update silently.
 
 ## Next steps (roadmap)
 

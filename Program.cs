@@ -14,7 +14,8 @@ sealed class Program
     {
         // Headless end-to-end verification of the data layer.
         // "--selftest" = full PostgreSQL suite; "--selftest <provider>" = generic engine matrix;
-        // "--selftest secrets" = OS keyring round-trip + connections.json secrecy checks.
+        // "--selftest secrets" = OS keyring round-trip + connections.json secrecy checks;
+        // "--selftest updater" = self-update logic (+ install detection / optional package apply).
         var selftestIdx = Array.IndexOf(args, "--selftest");
         if (selftestIdx >= 0)
         {
@@ -23,6 +24,7 @@ sealed class Program
             {
                 null or "postgresql" => SelfTest.RunAsync().GetAwaiter().GetResult(),
                 "secrets" => SelfTestSecrets.Run(),
+                "updater" => SelfTestUpdater.RunAsync().GetAwaiter().GetResult(),
                 _ => SelfTestMatrix.RunAsync(providerArg).GetAwaiter().GetResult()
             };
         }

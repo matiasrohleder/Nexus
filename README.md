@@ -125,6 +125,30 @@ tar xzf Nexus-<version>-linux-x64.tar.gz
 Then open **Nexus** from your applications menu, or run `nexus` in a terminal. Uninstall with
 `sudo apt remove nexus-db` or `sudo dnf remove nexus-db`.
 
+### Updates
+
+From **0.4.0** on, Nexus updates itself. When it starts it checks GitHub for a newer release and
+offers it (**Update now**, **Later** or **Skip this version**); you can also check any time from
+**⋯ → Check for updates…**, and turn the startup check off in that dialog. *Update now*
+downloads the installer for your system, verifies its SHA-256 checksum, installs it in place and
+restarts Nexus — your connections, passwords and settings are kept:
+
+| Installed with | How Nexus updates it |
+|---|---|
+| Windows setup | Runs the new setup silently over the current install, then reopens Nexus |
+| macOS `.dmg` | Replaces `Nexus.app` with the new one (no drag and drop needed) |
+| `.deb` / `.rpm` | Upgrades the package with `apt` / `dnf` (`zypper` on openSUSE), asking for your password |
+| `.tar.gz` | Re-runs `install.sh` for your user (no password) |
+
+Copies that weren't installed by an installer (e.g. built from source) link to the release page
+instead. Versions before 0.4.0 can't update themselves — install 0.4.0 once by hand.
+
+**Upgrading by hand on Linux:** install the new package over the old one —
+`sudo apt install ./Nexus-<version>-linux-x64.deb` (or `sudo dnf install ./…rpm`). There is no
+need to uninstall first. Some software centers (e.g. Ubuntu's App Center) only say *"installed"*
+when a `.deb` with the same name is already present instead of offering the upgrade; use the
+command above or the in-app update.
+
 ## Your data and passwords
 
 **Passwords are never written to a file.** They are stored in your operating system's own

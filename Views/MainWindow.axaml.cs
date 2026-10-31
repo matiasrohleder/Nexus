@@ -22,6 +22,8 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         DataContextChanged += OnDataContextChanged;
+        // Startup update check runs once the window is up (never blocks or delays the launch).
+        Opened += (_, _) => { if (_vm is not null) _ = _vm.Updates.CheckOnStartupAsync(); };
         // After the layout picks up the new font, re-measure every visible grid's columns.
         Services.UiFonts.Changed += () => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
@@ -63,6 +65,11 @@ public partial class MainWindow : Window
             if (e.Key == Key.Escape && ConfirmOverlay.IsVisible)
             {
                 ResolveOverlay(false);
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Escape && _vm?.Updates.IsOpen == true)
+            {
+                _vm.Updates.LaterCommand.Execute(null);
                 e.Handled = true;
             }
         };
@@ -199,6 +206,9 @@ public partial class MainWindow : Window
         _vm.PickImportFile = PickConnectionsFileAsync;
         _vm.Notify = message => _ = ShowNoticeAsync(message);
         _vm.Prompt = ShowPromptAsync;
+        _vm.Updates.Quit = () =>
+            (Avalonia.Application.Current?.ApplicationLifetime as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)
+            ?.Shutdown();
         _vm.PropertyChanged += OnVmPropertyChanged;
         ApplySidebarSide(_vm.SidebarOnLeft);
     }

@@ -30,6 +30,12 @@ public sealed class AppSettings
     /// <summary>Folders the user collapsed in the explorer (folders start expanded).</summary>
     public List<string> CollapsedFolders { get; set; } = new();
 
+    /// <summary>Look for a newer release on GitHub when Nexus starts (and offer to install it).</summary>
+    public bool CheckForUpdatesOnStartup { get; set; } = true;
+
+    /// <summary>A release the user chose to skip: the startup check stays quiet about it.</summary>
+    public string? SkippedUpdateVersion { get; set; }
+
     private static string FilePath => Path.Combine(AppPaths.ConfigDir, "settings.json");
 
     public static AppSettings Load()
