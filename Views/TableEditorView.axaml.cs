@@ -14,6 +14,14 @@ public partial class TableEditorView : UserControl
         InitializeComponent();
         DataContextChanged += OnDataContextChanged;
         EditGrid.CellEditEnded += (_, _) => _vm?.UpdatePendingStatus();
+        EditGrid.LoadingRow += (_, e) => e.Row.Header = (e.Row.Index + 1).ToString("N0");
+        // Ctrl+wheel zooms the grid font (shared with the query results grids).
+        EditGrid.AddHandler(PointerWheelChangedEvent, (_, e) =>
+        {
+            if (!e.KeyModifiers.HasFlag(Avalonia.Input.KeyModifiers.Control) || e.Delta.Y == 0) return;
+            Services.UiFonts.ChangeGrid(e.Delta.Y > 0 ? 1 : -1);
+            e.Handled = true;
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
     }
 
     private void OnDataContextChanged(object? sender, EventArgs e)
@@ -49,5 +57,6 @@ public partial class TableEditorView : UserControl
         }
 
         EditGrid.ItemsSource = _vm.Rows;
+        GridColumns.FillLastColumn(EditGrid);
     }
 }

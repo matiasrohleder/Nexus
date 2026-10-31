@@ -6,7 +6,10 @@ using Nexus.Models;
 
 namespace Nexus.ViewModels;
 
-public enum NodeKind { Connection, Database, Schema, Table, View, Column, Message }
+public enum NodeKind { Folder, Connection, Database, Schema, Table, View, Column, Message }
+
+/// <summary>Where a dragged explorer node would land relative to the node under the pointer.</summary>
+public enum DropPosition { None, Before, After, Into }
 
 /// <summary>
 /// A lazily-loaded node in the object-explorer tree. Children are fetched on first expand via
@@ -22,6 +25,15 @@ public partial class TreeNodeViewModel : ObservableObject
 
     [ObservableProperty] private bool _isExpanded;
     [ObservableProperty] private bool _isLoading;
+
+    /// <summary>Drag-and-drop feedback: line above/below the row, or highlighted row (drop into folder).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsDropBefore), nameof(IsDropAfter), nameof(IsDropInto))]
+    private DropPosition _dropHint;
+
+    public bool IsDropBefore => DropHint == DropPosition.Before;
+    public bool IsDropAfter => DropHint == DropPosition.After;
+    public bool IsDropInto => DropHint == DropPosition.Into;
 
     /// <summary>Connection roots: holds live server connections (see Services.ConnectionStatus).</summary>
     [ObservableProperty]
@@ -71,6 +83,10 @@ public partial class TreeNodeViewModel : ObservableObject
     public TreeNodeViewModel? Parent { get; set; }
 
     public bool IsConnection => Kind == NodeKind.Connection;
+    public bool IsFolder => Kind == NodeKind.Folder;
+    /// <summary>Connections and folders can be reordered / regrouped (menu or drag and drop).</summary>
+    public bool CanMove => Kind is NodeKind.Connection or NodeKind.Folder;
+    public bool CanRefresh => Kind != NodeKind.Folder;
     public bool IsQueryable => Kind is NodeKind.Table or NodeKind.View;
 
     // Context-menu visibility per node kind (the explorer menu binds to these on the selected node).
@@ -96,6 +112,7 @@ public partial class TreeNodeViewModel : ObservableObject
         Kind = kind;
         IconColor = kind switch
         {
+            NodeKind.Folder => "#A1A1AA",
             NodeKind.Database => "#60A5FA",
             NodeKind.Schema => "#FBBF24",
             NodeKind.Table => "#7DD3FC",

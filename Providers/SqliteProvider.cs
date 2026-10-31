@@ -43,7 +43,19 @@ public sealed class SqliteProvider : SqlProviderBase
     public override string QuoteIdent(string ident) => $"\"{ident.Replace("\"", "\"\"")}\"";
 
     public override string BuildSelectQuery(string container, string obj, int limit, IReadOnlyList<ColumnInfo>? columns = null) =>
-        $"SELECT {ColumnList(columns)}\nFROM {QuoteIdent(obj)}\nLIMIT {limit};";
+        FormatSelect("SELECT", Ident(obj), columns, $"LIMIT {limit};");
+
+    public override IReadOnlyList<string> DialectKeywords { get; } =
+    [
+        "AUTOINCREMENT", "PRAGMA", "WITHOUT ROWID", "ROWID", "INSERT OR REPLACE", "INSERT OR IGNORE",
+        "GLOB", "ATTACH DATABASE", "DETACH DATABASE", "VACUUM", "INTEGER", "TEXT", "REAL", "BLOB"
+    ];
+
+    public override IReadOnlyList<string> DialectFunctions { get; } =
+    [
+        "DATE", "TIME", "DATETIME", "JULIANDAY", "STRFTIME", "IFNULL", "IIF", "INSTR", "PRINTF", "GROUP_CONCAT",
+        "JSON_EXTRACT", "JSON_OBJECT", "JSON_GROUP_ARRAY", "LAST_INSERT_ROWID", "TYPEOF", "RANDOM", "HEX"
+    ];
 
     public override async Task<(bool ok, string message)> TestConnectionAsync(SavedConnection c, CancellationToken ct = default)
     {

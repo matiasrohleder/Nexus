@@ -66,6 +66,9 @@ public abstract class SqlProviderBase : IDatabaseProvider
     public abstract string BuildSelectQuery(string container, string obj, int limit, IReadOnlyList<ColumnInfo>? columns = null);
     public virtual string QuoteLiteral(string value) => Lit(value);
 
+    public virtual IReadOnlyList<string> DialectKeywords => Array.Empty<string>();
+    public virtual IReadOnlyList<string> DialectFunctions => Array.Empty<string>();
+
     public virtual string? BuildDropContainerSql(string container, bool cascade) => null;
 
     /// <summary>DROP DATABASE for engines with a server-level database list (PG/MSSQL). Null = unsupported.</summary>
@@ -78,13 +81,55 @@ public abstract class SqlProviderBase : IDatabaseProvider
     public virtual Task PrepareDropDatabaseAsync(SavedConnection c) => Task.CompletedTask;
 
     /// <summary>
-    /// Formats the SELECT list: explicit quoted columns (one per line, aligned) when known,
-    /// otherwise "*". Shared by every dialect's BuildSelectQuery.
+    /// Lays out a generated SELECT the way people write it by hand: keyword on its own line, one
+    /// column per line indented by four spaces, then FROM and the dialect's row-limit clause.
+    /// <paramref name="head"/> is "SELECT" or "SELECT TOP (n)"; <paramref name="tail"/> is the
+    /// limit clause after FROM (or null). Falls back to "SELECT *" when the columns are unknown.
     /// </summary>
-    protected string ColumnList(IReadOnlyList<ColumnInfo>? columns) =>
-        columns is null || columns.Count == 0
-            ? "*"
-            : string.Join(",\n       ", columns.Select(col => QuoteIdent(col.Name)));
+    protected string FormatSelect(string head, string from, IReadOnlyList<ColumnInfo>? columns, string? tail)
+    {
+        var sb = new System.Text.StringBuilder();
+        if (columns is null || columns.Count == 0)
+            sb.Append(head).Append(" *");
+        else
+        {
+            sb.Append(head);
+            for (int i = 0; i < columns.Count; i++)
+                sb.Append("\n    ").Append(Ident(columns[i].Name)).Append(i < columns.Count - 1 ? "," : "");
+        }
+        sb.Append("\nFROM ").Append(from);
+        if (tail is not null) sb.Append("\n").Append(tail);
+        return sb.ToString();
+    }
+
+    /// <summary>"schema.table" with each part quoted only when needed.</summary>
+    protected string Qualified(string container, string obj) => $"{Ident(container)}.{Ident(obj)}";
+
+    /// <summary>
+    /// How the engine folds unquoted identifiers: PostgreSQL lowercases, Oracle uppercases, the
+    /// rest keep the spelling. Decides when <see cref="Ident"/> can leave a name unquoted.
+    /// </summary>
+    protected virtual IdentifierCase UnquotedCase => IdentifierCase.Preserve;
+
+    /// <summary>
+    /// Quotes an identifier only when it must be: odd characters, a reserved word, or a spelling
+    /// the engine would fold into a different name. Keeps generated SQL readable
+    /// (<c>customers.name</c> instead of <c>"customers"."name"</c>) without changing its meaning.
+    /// </summary>
+    public string Ident(string ident)
+    {
+        if (ident.Length == 0 || !(char.IsAsciiLetter(ident[0]) || ident[0] == '_')) return QuoteIdent(ident);
+        foreach (var ch in ident)
+        {
+            if (!(char.IsAsciiLetterOrDigit(ch) || ch == '_')) return QuoteIdent(ident);
+            if (UnquotedCase == IdentifierCase.Lower && char.IsAsciiLetterUpper(ch)) return QuoteIdent(ident);
+            if (UnquotedCase == IdentifierCase.Upper && char.IsAsciiLetterLower(ch)) return QuoteIdent(ident);
+        }
+        return IsReservedWord(ident) ? QuoteIdent(ident) : ident;
+    }
+
+    /// <summary>Reserved words that force quoting; dialects with extra ones (Oracle) extend it.</summary>
+    protected virtual bool IsReservedWord(string word) => SqlLanguage.IsReserved(word);
 
     // ---- core ----------------------------------------------------------------------
 
@@ -145,6 +190,7 @@ public abstract class SqlProviderBase : IDatabaseProvider
                     }
 
                     totalRows += qr.Rows.Count;
+                    qr.IsTruncated = truncated;
                     qr.Message = truncated
                         ? $"{qr.Rows.Count} row(s) shown — output truncated at {MaxRowsPerResult:N0}; add a LIMIT/TOP for more control"
                         : $"{qr.Rows.Count} row(s) returned";

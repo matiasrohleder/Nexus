@@ -21,6 +21,7 @@ namespace Nexus.Providers;
 public sealed partial class MongoProvider : IDatabaseProvider
 {
     public string Id => "mongodb";
+    public string QueryLanguage => "mongo";
     public string DisplayName => "MongoDB";
     public string BrandColor => "#47A248";
     public int DefaultPort => 27017;

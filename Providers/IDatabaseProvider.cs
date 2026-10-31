@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -28,6 +29,9 @@ public sealed record ProviderCapabilities
 }
 
 public enum DbObjectKind { Table, View, Collection }
+
+/// <summary>How an engine folds unquoted identifiers (decides when generated SQL must quote a name).</summary>
+public enum IdentifierCase { Preserve, Lower, Upper }
 
 public sealed record DbObjectInfo(string Name, DbObjectKind Kind);
 
@@ -95,6 +99,19 @@ public interface IDatabaseProvider
 
     // ---- dialect helpers ----
     string QuoteIdent(string ident);
+
+    /// <summary>Identifier as it should appear in generated/completed text: quoted only when it must be.</summary>
+    string Ident(string ident) => ident;
+
+    /// <summary>Editor language of query tabs: "sql", "mongo" (mongosh-style) or "redis" (raw commands).</summary>
+    string QueryLanguage => "sql";
+
+    /// <summary>Engine-specific keywords for completion/highlighting, on top of <see cref="Services.SqlLanguage"/>'s common set.</summary>
+    IReadOnlyList<string> DialectKeywords => Array.Empty<string>();
+
+    /// <summary>Engine-specific function names for completion/highlighting.</summary>
+    IReadOnlyList<string> DialectFunctions => Array.Empty<string>();
+
     /// <summary>Escapes a string as a single-quoted SQL literal for this dialect.</summary>
     string QuoteLiteral(string value);
 

@@ -45,6 +45,10 @@ public sealed class SavedConnection
     /// <summary>Optional accent color (hex) shown in the sidebar to distinguish environments.</summary>
     public string Color { get; set; } = "#3B82F6";
 
+    /// <summary>Explorer folder this connection is grouped under (null = top level).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Folder { get; set; }
+
     public SavedConnection Clone() => (SavedConnection)MemberwiseClone();
 
     // Identity is the profile Id: a database-pinned clone (see the object explorer) still "is" its

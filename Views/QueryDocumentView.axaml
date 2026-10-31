@@ -6,7 +6,15 @@
              x:Class="Nexus.Views.QueryDocumentView"
              x:DataType="vm:QueryDocumentViewModel">
 
-    <Grid RowDefinitions="Auto,2*,Auto,Auto,3*">
+    <!-- The splitter sits between two star rows (editor | results block). It used to border the
+         Auto-sized error banner row, so dragging resized the (usually hidden) banner and jumped. -->
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="2*" MinHeight="60" />
+            <RowDefinition Height="6" />
+            <RowDefinition Height="3*" MinHeight="90" />
+        </Grid.RowDefinitions>
 
         <!-- Toolbar -->
         <Border Grid.Row="0" Background="#252526" Padding="8 6" BorderBrush="#3F3F46" BorderThickness="0 0 0 1">
@@ -72,15 +80,17 @@
         <ae:TextEditor Grid.Row="1" Name="Editor"
                        ShowLineNumbers="True"
                        FontFamily="{StaticResource MonoFont}"
-                       FontSize="14"
+                       FontSize="{DynamicResource EditorFontSize}"
                        Background="#1E1E1E"
+                       Foreground="#D4D4D4"
                        HorizontalScrollBarVisibility="Auto"
                        VerticalScrollBarVisibility="Auto" />
 
-        <GridSplitter Grid.Row="2" Height="4" HorizontalAlignment="Stretch" Background="#3F3F46" />
+        <GridSplitter Grid.Row="2" ResizeDirection="Rows" ResizeBehavior="PreviousAndNext" />
 
+        <Grid Grid.Row="3" RowDefinitions="Auto,*">
         <!-- Error banner (shown above the results whenever the last run failed) -->
-        <Border Grid.Row="3" IsVisible="{Binding HasError}"
+        <Border Grid.Row="0" IsVisible="{Binding HasError}"
                 Background="#3A1D1D" BorderBrush="#F48771" BorderThickness="1" CornerRadius="4"
                 Margin="6 6 6 0" Padding="10 8">
             <Grid ColumnDefinitions="Auto,*,Auto">
@@ -97,10 +107,11 @@
         </Border>
 
         <!-- Results / Messages -->
-        <TabControl Grid.Row="4" Background="#1E1E1E">
+        <TabControl Grid.Row="1" Background="#1E1E1E">
             <TabItem Header="Results">
                 <Grid RowDefinitions="Auto,*">
-                    <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="6" Margin="6">
+                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="6">
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6">
                         <ComboBox MinWidth="140"
                                   IsVisible="{Binding HasMultipleResults}"
                                   ItemsSource="{Binding Results}"
@@ -126,12 +137,16 @@
                             </StackPanel>
                         </Button>
                     </StackPanel>
-                    <DataGrid Grid.Row="1" Name="ResultsGrid"
+                    <TextBlock Grid.Column="1" Text="{Binding ResultSummary}" VerticalAlignment="Center"
+                               Margin="12 0 4 0" FontSize="12" Foreground="#A1A1AA" />
+                    </Grid>
+                    <!-- Row headers show the 1-based row number (set in LoadingRow). -->
+                    <DataGrid Grid.Row="1" Name="ResultsGrid" Classes="numbered"
                               AutoGenerateColumns="False" IsReadOnly="True"
                               CanUserResizeColumns="True" CanUserSortColumns="False"
-                              GridLinesVisibility="All"
+                              GridLinesVisibility="All" HeadersVisibility="All"
                               FontFamily="{StaticResource MonoFont}"
-                              FontSize="12" />
+                              FontSize="{DynamicResource GridFontSize}" />
                 </Grid>
             </TabItem>
             <TabItem Header="Messages">
@@ -141,5 +156,6 @@
                          Background="#1E1E1E" BorderThickness="0" />
             </TabItem>
         </TabControl>
+        </Grid>
     </Grid>
 </UserControl>

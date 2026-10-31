@@ -11,8 +11,13 @@ using AvaloniaEdit;
 using AvaloniaEdit.CodeCompletion;
 using AvaloniaEdit.Document;
 using AvaloniaEdit.Editing;
-using AvaloniaEdit.Highlighting;
+using Avalonia;
+using Avalonia.Layout;
+using Avalonia.Media;
+using Avalonia.Threading;
+using Nexus.Controls;
 using Nexus.Models;
+using Nexus.Providers;
 using Nexus.Services;
 using Nexus.ViewModels;
 
@@ -23,24 +28,44 @@ public partial class QueryDocumentView : UserControl
     private QueryDocumentViewModel? _vm;
     private bool _syncingText;
     private CompletionWindow? _completionWindow;
+    private readonly QueryColorizer _colorizer = new();
+    private int _completionRequest;
 
     public QueryDocumentView()
     {
         InitializeComponent();
 
-        // Built-in SQL syntax highlighting (ships with AvaloniaEdit).
-        try
-        {
-            Editor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinition("SQL");
-        }
-        catch { /* highlighting is optional */ }
+        // Own tokenizer-based highlighting (see QueryColorizer) instead of the generic SQL definition,
+        // whose light-theme colors left almost everything white on the dark editor.
+        Editor.TextArea.TextView.LineTransformers.Add(_colorizer);
+        Editor.Options.ConvertTabsToSpaces = true;
+        Editor.Options.IndentationSize = 4;
+        Editor.Options.HighlightCurrentLine = true;
+        Editor.TextArea.TextView.CurrentLineBackground = new SolidColorBrush(Color.Parse("#262628"));
+        Editor.TextArea.TextView.CurrentLineBorder = new Pen(Brushes.Transparent);
 
         Editor.TextChanged += OnEditorTextChanged;
         Editor.TextArea.KeyDown += OnEditorKeyDown;
+        Editor.TextArea.TextEntered += OnTextEntered;
         // Tunnel phase: intercept Ctrl+Enter BEFORE AvaloniaEdit turns Enter into a newline.
         Editor.AddHandler(KeyDownEvent, OnEditorPreviewKeyDown, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        // Ctrl+wheel zooms the editor; over the results it zooms the grid.
+        Editor.AddHandler(PointerWheelChangedEvent, (_, e) => OnZoomWheel(e, UiFonts.ChangeEditor),
+            Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        ResultsGrid.AddHandler(PointerWheelChangedEvent, (_, e) => OnZoomWheel(e, UiFonts.ChangeGrid),
+            Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        ResultsGrid.LoadingRow += (_, e) => e.Row.Header = (e.Row.Index + 1).ToString("N0");
         CopyErrorButton.Click += OnCopyError;
         DataContextChanged += OnDataContextChanged;
+        AttachedToVisualTree += (_, _) => SchemaCache.Changed += OnSchemaChanged;
+        DetachedFromVisualTree += (_, _) => SchemaCache.Changed -= OnSchemaChanged;
+    }
+
+    private static void OnZoomWheel(PointerWheelEventArgs e, Action<double> change)
+    {
+        if (!e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.Delta.Y == 0) return;
+        change(e.Delta.Y > 0 ? 1 : -1);
+        e.Handled = true;
     }
 
     private async void OnCopyError(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -54,10 +79,29 @@ public partial class QueryDocumentView : UserControl
     {
         if (e.Key == Key.Enter && e.KeyModifiers.HasFlag(KeyModifiers.Control))
         {
+            _completionWindow?.Close();
             if (_vm is { IsRunning: false })
                 _vm.RunCommand.Execute(null);
             e.Handled = true;
         }
+        else if (ZoomDelta(e) is { } delta)
+        {
+            if (delta == 0) UiFonts.Reset(); else UiFonts.ChangeAll(delta);
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>Ctrl+= / Ctrl++ → +1, Ctrl+- → -1, Ctrl+0 → 0 (reset); null for other keys.</summary>
+    internal static int? ZoomDelta(KeyEventArgs e)
+    {
+        if (!e.KeyModifiers.HasFlag(KeyModifiers.Control)) return null;
+        return e.Key switch
+        {
+            Key.OemPlus or Key.Add => 1,
+            Key.OemMinus or Key.Subtract => -1,
+            Key.D0 or Key.NumPad0 => 0,
+            _ => null
+        };
     }
 
     private void OnDataContextChanged(object? sender, EventArgs e)
@@ -80,79 +124,173 @@ public partial class QueryDocumentView : UserControl
         _vm.PropertyChanged += OnVmPropertyChanged;
 
         RebuildColumns(_vm.SelectedResult);
-
-        // Warm the schema cache for autocomplete.
-        if (_vm.Connection is not null)
-            SchemaCache.GetWords(_vm.Connection);
+        ConfigureLanguage();
     }
 
-    // ---- keyboard: Ctrl+Space completion, Ctrl+O/Ctrl+S files ---------------------------
+    /// <summary>Points highlighting/completion at the tab's connection+database (and warms its schema).</summary>
+    private void ConfigureLanguage()
+    {
+        var conn = _vm?.SchemaConnection;
+        _colorizer.Configure(conn is null ? null : ProviderRegistry.For(conn));
+        _colorizer.Schema = conn is null ? null : SchemaCache.Get(conn);
+        Editor.TextArea.TextView.Redraw();
+    }
+
+    private void OnSchemaChanged(Guid connectionId)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            var conn = _vm?.SchemaConnection;
+            if (conn is null || conn.Id != connectionId) return;
+            // After Invalidate (refresh/disconnect) don't reload eagerly: that would reconnect.
+            // The next completion request loads it again.
+            _colorizer.Schema = SchemaCache.TryGet(conn);
+            Editor.TextArea.TextView.Redraw();
+        });
+    }
+
+    // ---- keyboard: completion, zoom, Ctrl+O/Ctrl+S files ---------------------------------
 
     private void OnEditorKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Space && e.KeyModifiers.HasFlag(KeyModifiers.Control))
+        var ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control);
+        if (e.Key == Key.Space && ctrl)
         {
-            ShowCompletion();
+            _ = ShowCompletionAsync(explicitInvoke: true);
             e.Handled = true;
         }
-        else if (e.Key == Key.O && e.KeyModifiers.HasFlag(KeyModifiers.Control))
+        else if (e.Key == Key.O && ctrl)
         {
             _vm?.OpenFileCommand.Execute(null);
             e.Handled = true;
         }
-        else if (e.Key == Key.S && e.KeyModifiers.HasFlag(KeyModifiers.Control))
+        else if (e.Key == Key.S && ctrl)
         {
             _vm?.SaveFileCommand.Execute(null);
             e.Handled = true;
         }
     }
 
-    private void ShowCompletion()
+    /// <summary>Opens completion while typing: on a word's first letter and right after a ".".</summary>
+    private void OnTextEntered(object? sender, TextInputEventArgs e)
     {
-        if (_vm is null) return;
+        if (string.IsNullOrEmpty(e.Text) || _vm?.SchemaConnection is null) return;
+        var ch = e.Text[^1];
 
-        // Word being typed (used to seed the filter).
-        var caret = Editor.CaretOffset;
-        var start = caret;
-        while (start > 0 && (char.IsLetterOrDigit(Editor.Document.GetCharAt(start - 1))
-                             || Editor.Document.GetCharAt(start - 1) == '_'))
-            start--;
-        var prefix = Editor.Document.GetText(start, caret - start);
-
-        var schemaWords = _vm.Connection is not null
-            ? SchemaCache.GetWords(_vm.Connection)
-            : Array.Empty<string>();
-
-        var candidates = SchemaCache.SqlKeywords
-            .Concat(schemaWords)
-            .Where(w => prefix.Length == 0 || w.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(w => w)
-            .Take(200)
-            .ToList();
-        if (candidates.Count == 0) return;
-
-        _completionWindow = new CompletionWindow(Editor.TextArea)
+        if (_completionWindow is not null)
         {
-            StartOffset = start,
-            EndOffset = caret
-        };
-        foreach (var word in candidates)
-            _completionWindow.CompletionList.CompletionData.Add(new SqlCompletionData(word));
-        _completionWindow.Show();
-        _completionWindow.Closed += (_, _) => _completionWindow = null;
+            // The list filters itself while the word grows; anything else ends the word.
+            if (!SqlLanguage.IsWordPart(ch)) _completionWindow.Close();
+            else if (!_completionWindow.CompletionList.CurrentList.Any()) _completionWindow.Close();
+            if (ch != '.') return;
+        }
+
+        if (ch == '.' || (SqlLanguage.IsWordStart(ch) || ch == '$') && WordLengthBeforeCaret() == 1)
+            _ = ShowCompletionAsync(explicitInvoke: false);
     }
 
-    private sealed class SqlCompletionData : ICompletionData
+    private int WordLengthBeforeCaret()
     {
-        public SqlCompletionData(string text) => Text = text;
-        public string Text { get; }
-        public object Content => Text;
-        public object Description => Text;
+        int caret = Editor.CaretOffset, start = caret;
+        while (start > 0 && SqlLanguage.IsWordPart(Editor.Document.GetCharAt(start - 1))) start--;
+        return caret - start;
+    }
+
+    private async Task ShowCompletionAsync(bool explicitInvoke)
+    {
+        var conn = _vm?.SchemaConnection;
+        if (conn is null) return;
+
+        var request = ++_completionRequest;
+        var text = Editor.Text;
+        var caret = Editor.CaretOffset;
+        var provider = ProviderRegistry.For(conn);
+
+        CompletionResult? result;
+        try { result = await SqlCompletion.CompleteAsync(text, caret, provider, SchemaCache.Get(conn), explicitInvoke); }
+        catch { return; }
+
+        // Stale: the user kept typing past the word, moved away, or a newer request started.
+        if (request != _completionRequest || result is null) return;
+        if (Editor.CaretOffset < result.ReplaceStart || Editor.CaretOffset > Editor.Document.TextLength) return;
+        var typed = Editor.Document.GetText(result.ReplaceStart, Editor.CaretOffset - result.ReplaceStart);
+        if (typed.Any(ch => !SqlLanguage.IsWordPart(ch))) return;
+        if (!explicitInvoke && typed.Length > 0 &&
+            !result.Items.Any(i => i.Label.Contains(typed, StringComparison.OrdinalIgnoreCase))) return;
+
+        _completionWindow?.Close();
+        var window = new CompletionWindow(Editor.TextArea)
+        {
+            StartOffset = result.ReplaceStart,
+            EndOffset = Editor.CaretOffset,
+            CloseWhenCaretAtBeginning = !explicitInvoke && typed.Length > 0,
+            MinWidth = 300
+        };
+        foreach (var item in result.Items)
+            window.CompletionList.CompletionData.Add(new CompletionData(item));
+        window.Closed += (_, _) => { if (_completionWindow == window) _completionWindow = null; };
+        _completionWindow = window;
+        window.Show();
+        if (typed.Length > 0)
+            window.CompletionList.SelectItem(typed);
+    }
+
+    /// <summary>A completion row: kind glyph, label, muted detail (column type, "table"…).</summary>
+    private sealed class CompletionData : ICompletionData
+    {
+        private readonly CompletionItem _item;
+        private object? _content;
+
+        public CompletionData(CompletionItem item) => _item = item;
+
+        public string Text => _item.Label;
+        public object Description => _item.Detail ?? _item.Kind.ToString().ToLowerInvariant();
         public Avalonia.Media.IImage? Image => null;
-        public double Priority => 0;
+        public double Priority => -_item.Rank;
+
+        public object Content => _content ??= BuildContent();
+
+        private Control BuildContent()
+        {
+            var (glyph, color) = _item.Kind switch
+            {
+                CompletionKind.Table => ("table", "#4EC9B0"),
+                CompletionKind.View => ("view", "#C4B5FD"),
+                CompletionKind.Schema => ("folder", "#FBBF24"),
+                CompletionKind.Column => ("column", "#9CDCFE"),
+                CompletionKind.Alias => ("link", "#4EC9B0"),
+                CompletionKind.Function or CompletionKind.Method => ("function", "#DCDCAA"),
+                CompletionKind.Operator => ("zap", "#C586C0"),
+                _ => ("keyword", "#569CD6")
+            };
+            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto") };
+            row.Children.Add(new Icon
+            {
+                Kind = glyph, Size = 13, StrokeThickness = 1.8, Margin = new Thickness(0, 0, 8, 0),
+                Foreground = new SolidColorBrush(Color.Parse(color)), VerticalAlignment = VerticalAlignment.Center
+            });
+            var label = new TextBlock { Text = _item.Label, VerticalAlignment = VerticalAlignment.Center };
+            Grid.SetColumn(label, 1);
+            row.Children.Add(label);
+            if (_item.Detail is { Length: > 0 } detail)
+            {
+                var d = new TextBlock
+                {
+                    Text = detail, Opacity = 0.5, FontSize = 11, Margin = new Thickness(16, 0, 0, 0),
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                Grid.SetColumn(d, 2);
+                row.Children.Add(d);
+            }
+            return row;
+        }
+
         public void Complete(TextArea textArea, ISegment completionSegment, EventArgs insertionRequestEventArgs)
-            => textArea.Document.Replace(completionSegment, Text);
+        {
+            textArea.Document.Replace(completionSegment, _item.InsertText);
+            if (_item.CaretBack > 0)
+                textArea.Caret.Offset = Math.Max(0, textArea.Caret.Offset - _item.CaretBack);
+        }
     }
 
     // ---- pickers / prompts ----------------------------------------------------------------
@@ -229,6 +367,9 @@ public partial class QueryDocumentView : UserControl
 
     private void OnEditorTextChanged(object? sender, EventArgs e)
     {
+        // Multi-line constructs (/* */, strings) can change the look of lines below the edit.
+        _colorizer.Invalidate();
+        Editor.TextArea.TextView.Redraw();
         if (_syncingText || _vm is null) return;
         _vm.DocumentText = Editor.Text;
     }
@@ -237,6 +378,8 @@ public partial class QueryDocumentView : UserControl
     {
         if (e.PropertyName == nameof(QueryDocumentViewModel.SelectedResult))
             RebuildColumns(_vm?.SelectedResult);
+        else if (e.PropertyName == nameof(QueryDocumentViewModel.SchemaConnection))
+            ConfigureLanguage();
         else if (e.PropertyName == nameof(QueryDocumentViewModel.DocumentText) && _vm is not null
                  && !_syncingText && Editor.Text != _vm.DocumentText)
         {
@@ -267,5 +410,6 @@ public partial class QueryDocumentView : UserControl
         }
 
         ResultsGrid.ItemsSource = result.Rows;
+        GridColumns.FillLastColumn(ResultsGrid);
     }
 }

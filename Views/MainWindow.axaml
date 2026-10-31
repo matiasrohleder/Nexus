@@ -14,6 +14,11 @@
         <KeyBinding Gesture="F5" Command="{Binding RunActiveCommand}" />
         <KeyBinding Gesture="Ctrl+Enter" Command="{Binding RunActiveCommand}" />
         <KeyBinding Gesture="Ctrl+N" Command="{Binding NewQueryCommand}" />
+        <KeyBinding Gesture="Ctrl+OemPlus" Command="{Binding ZoomInCommand}" />
+        <KeyBinding Gesture="Ctrl+Add" Command="{Binding ZoomInCommand}" />
+        <KeyBinding Gesture="Ctrl+OemMinus" Command="{Binding ZoomOutCommand}" />
+        <KeyBinding Gesture="Ctrl+Subtract" Command="{Binding ZoomOutCommand}" />
+        <KeyBinding Gesture="Ctrl+D0" Command="{Binding ZoomResetCommand}" />
     </Window.KeyBindings>
 
     <Panel>
@@ -30,6 +35,15 @@
                                VerticalAlignment="Center" Margin="0 2 0 0" />
                 </StackPanel>
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
+                    <!-- Shown while a newer release is known (dismissed with "Later") -->
+                    <Button Classes="toolbar accent" Command="{Binding Updates.ShowCommand}"
+                            IsVisible="{Binding Updates.PendingVersion, Converter={x:Static ObjectConverters.IsNotNull}}"
+                            ToolTip.Tip="A new version of Nexus is available">
+                        <StackPanel Orientation="Horizontal" Spacing="7">
+                            <c:Icon Kind="download" Size="15" />
+                            <TextBlock Text="{Binding Updates.BadgeText}" />
+                        </StackPanel>
+                    </Button>
                     <Button Classes="toolbar" Command="{Binding NewQueryCommand}" ToolTip.Tip="New query (Ctrl+N)">
                         <StackPanel Orientation="Horizontal" Spacing="7">
                             <c:Icon Kind="query" Size="15" />
@@ -44,7 +58,7 @@
         <Grid Name="MainSplitGrid">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="280" MinWidth="180" />
-                <ColumnDefinition Width="4" />
+                <ColumnDefinition Width="5" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
@@ -59,19 +73,20 @@
                                 <Button Classes="icon" ToolTip.Tip="Add connection" Command="{Binding AddConnectionCommand}">
                                     <c:Icon Kind="plus" Size="16" />
                                 </Button>
-                                <Button Classes="icon" ToolTip.Tip="Edit selected connection" Command="{Binding EditConnectionCommand}">
-                                    <c:Icon Kind="edit" Size="15" />
-                                </Button>
                                 <Button Classes="icon" ToolTip.Tip="Refresh" Command="{Binding RefreshConnectionCommand}">
                                     <c:Icon Kind="refresh" Size="15" />
                                 </Button>
-                                <Button Classes="icon" ToolTip.Tip="Remove selected connection" Command="{Binding RemoveConnectionCommand}">
-                                    <c:Icon Kind="trash" Size="15" />
+                                <Button Classes="icon" ToolTip.Tip="Collapse all" Command="{Binding CollapseAllCommand}">
+                                    <c:Icon Kind="collapse" Size="15" />
                                 </Button>
                                 <Button Classes="icon" ToolTip.Tip="More">
                                     <c:Icon Kind="more" Size="16" StrokeThickness="3" />
                                     <Button.Flyout>
                                         <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                            <MenuItem Header="New folder…" Command="{Binding NewFolderCommand}">
+                                                <MenuItem.Icon><c:Icon Kind="folder-plus" /></MenuItem.Icon>
+                                            </MenuItem>
+                                            <Separator />
                                             <MenuItem Header="Import connections…" Command="{Binding ImportConnectionsCommand}">
                                                 <MenuItem.Icon><c:Icon Kind="import" /></MenuItem.Icon>
                                             </MenuItem>
@@ -85,7 +100,16 @@
                                             <MenuItem Header="Move sidebar to the other side" Command="{Binding ToggleSidebarSideCommand}">
                                                 <MenuItem.Icon><c:Icon Kind="swap" /></MenuItem.Icon>
                                             </MenuItem>
+                                            <MenuItem Header="Font size">
+                                                <MenuItem.Icon><c:Icon Kind="text-size" /></MenuItem.Icon>
+                                                <MenuItem Header="Bigger" InputGesture="Ctrl+OemPlus" Command="{Binding ZoomInCommand}" />
+                                                <MenuItem Header="Smaller" InputGesture="Ctrl+OemMinus" Command="{Binding ZoomOutCommand}" />
+                                                <MenuItem Header="Reset" InputGesture="Ctrl+D0" Command="{Binding ZoomResetCommand}" />
+                                            </MenuItem>
                                             <Separator />
+                                            <MenuItem Header="Check for updates…" Command="{Binding Updates.CheckNowCommand}">
+                                                <MenuItem.Icon><c:Icon Kind="download" /></MenuItem.Icon>
+                                            </MenuItem>
                                             <MenuItem Header="About Nexus" Command="{Binding ShowAboutCommand}">
                                                 <MenuItem.Icon><c:Icon Kind="info" /></MenuItem.Icon>
                                             </MenuItem>
@@ -137,7 +161,12 @@
                                           IsVisible="{Binding SelectedNode.CanDisconnect}">
                                     <MenuItem.Icon><c:Icon Kind="unlink" /></MenuItem.Icon>
                                 </MenuItem>
-                                <MenuItem Header="View Data (top 100)" Command="{Binding OpenTableCommand}"
+                                <MenuItem Header="Select Top 1000 Rows" Command="{Binding OpenTableCommand}"
+                                          CommandParameter="{Binding SelectedNode}"
+                                          IsVisible="{Binding SelectedNode.IsQueryable}">
+                                    <MenuItem.Icon><c:Icon Kind="search" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="Select Top 200 Rows" Command="{Binding OpenTableTop200Command}"
                                           CommandParameter="{Binding SelectedNode}"
                                           IsVisible="{Binding SelectedNode.IsQueryable}">
                                     <MenuItem.Icon><c:Icon Kind="search" /></MenuItem.Icon>
@@ -170,8 +199,33 @@
                                           IsVisible="{Binding SelectedNode.CanAdminServer}">
                                     <MenuItem.Icon><c:Icon Kind="server" /></MenuItem.Icon>
                                 </MenuItem>
+                                <MenuItem Header="Rename Folder…" Command="{Binding RenameFolderCommand}"
+                                          CommandParameter="{Binding SelectedNode}"
+                                          IsVisible="{Binding SelectedNode.IsFolder}">
+                                    <MenuItem.Icon><c:Icon Kind="edit" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="New Folder…" Command="{Binding NewFolderCommand}"
+                                          IsVisible="{Binding SelectedNode.CanMove}">
+                                    <MenuItem.Icon><c:Icon Kind="folder-plus" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="Move to Folder…" Command="{Binding MoveToFolderCommand}"
+                                          CommandParameter="{Binding SelectedNode}"
+                                          IsVisible="{Binding SelectedNode.IsConnection}">
+                                    <MenuItem.Icon><c:Icon Kind="folder" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="Move Up" Command="{Binding MoveUpCommand}"
+                                          CommandParameter="{Binding SelectedNode}"
+                                          IsVisible="{Binding SelectedNode.CanMove}">
+                                    <MenuItem.Icon><c:Icon Kind="arrow-up" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="Move Down" Command="{Binding MoveDownCommand}"
+                                          CommandParameter="{Binding SelectedNode}"
+                                          IsVisible="{Binding SelectedNode.CanMove}">
+                                    <MenuItem.Icon><c:Icon Kind="arrow-down" /></MenuItem.Icon>
+                                </MenuItem>
                                 <MenuItem Header="Refresh" Command="{Binding RefreshNodeCommand}"
-                                          CommandParameter="{Binding SelectedNode}">
+                                          CommandParameter="{Binding SelectedNode}"
+                                          IsVisible="{Binding SelectedNode.CanRefresh}">
                                     <MenuItem.Icon><c:Icon Kind="refresh" /></MenuItem.Icon>
                                 </MenuItem>
                                 <Separator />
@@ -189,6 +243,11 @@
                                           IsVisible="{Binding SelectedNode.IsConnection}">
                                     <MenuItem.Icon><c:Icon Kind="trash" Foreground="#F87171" /></MenuItem.Icon>
                                 </MenuItem>
+                                <MenuItem Header="Delete Folder (keeps connections)" Command="{Binding DeleteFolderCommand}"
+                                          CommandParameter="{Binding SelectedNode}"
+                                          IsVisible="{Binding SelectedNode.IsFolder}">
+                                    <MenuItem.Icon><c:Icon Kind="trash" Foreground="#F87171" /></MenuItem.Icon>
+                                </MenuItem>
                             </ContextMenu>
                         </TreeView.ContextMenu>
                         <TreeView.Styles>
@@ -199,6 +258,14 @@
                         </TreeView.Styles>
                         <TreeView.ItemTemplate>
                             <TreeDataTemplate ItemsSource="{Binding Children}" x:DataType="vm:TreeNodeViewModel">
+                                <!-- node-row: drag-and-drop hit target; the borders show where a drop lands -->
+                                <Panel Classes="node-row" Background="Transparent">
+                                <Border IsVisible="{Binding IsDropInto}" Background="#263B82F6" BorderBrush="#3B82F6"
+                                        BorderThickness="1" CornerRadius="3" Margin="-4 0" />
+                                <Border IsVisible="{Binding IsDropBefore}" Height="2" Background="#3B82F6"
+                                        VerticalAlignment="Top" />
+                                <Border IsVisible="{Binding IsDropAfter}" Height="2" Background="#3B82F6"
+                                        VerticalAlignment="Bottom" />
                                 <StackPanel Orientation="Horizontal" Spacing="7" Margin="0 2"
                                             Background="Transparent" ToolTip.Tip="{Binding StatusText}">
                                     <Border IsVisible="{Binding HasLogo}" Width="3" Height="16" CornerRadius="1.5"
@@ -217,16 +284,22 @@
                                     <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsLoading}"
                                                  Width="36" Height="2" MinWidth="0" VerticalAlignment="Center" />
                                 </StackPanel>
+                                </Panel>
                             </TreeDataTemplate>
                         </TreeView.ItemTemplate>
                     </TreeView>
                 </Grid>
             </Border>
 
-            <GridSplitter Name="MainSplitter" Grid.Column="1" Width="4" Background="#2B2B2F" />
+            <GridSplitter Name="MainSplitter" Grid.Column="1" ResizeDirection="Columns" ResizeBehavior="PreviousAndNext" />
 
             <!-- Editors (top) + Profiler (bottom) -->
-            <Grid Name="ContentPanel" Grid.Column="2" RowDefinitions="*,4,240">
+            <Grid Name="ContentPanel" Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" MinHeight="160" />
+                    <RowDefinition Height="5" />
+                    <RowDefinition Height="240" MinHeight="60" />
+                </Grid.RowDefinitions>
 
                 <!-- Query tabs -->
                 <Panel Grid.Row="0">
@@ -276,7 +349,7 @@
                     </StackPanel>
                 </Panel>
 
-                <GridSplitter Grid.Row="1" Height="4" HorizontalAlignment="Stretch" Background="#2B2B2F" />
+                <GridSplitter Grid.Row="1" ResizeDirection="Rows" ResizeBehavior="PreviousAndNext" />
 
                 <!-- Bottom panel: Profiler | History | Snippets -->
                 <Border Grid.Row="2" Background="#252526">
@@ -387,6 +460,78 @@
 
     <!-- In-window confirmation overlay: no OS dialog windows, so it can never get lost
          behind the main window (Wayland-safe) and never deadlocks the UI. -->
+    <!-- Update dialog: check / available / download progress / install / failure -->
+    <Border Name="UpdateOverlay" Background="#B0101010" IsVisible="{Binding Updates.IsOpen}" ZIndex="999">
+        <Border Width="480" Background="#252526" CornerRadius="10" Padding="22 20"
+                HorizontalAlignment="Center" VerticalAlignment="Center"
+                BorderBrush="#3F3F46" BorderThickness="1"
+                BoxShadow="0 12 40 0 #80000000">
+            <StackPanel Spacing="16">
+                <Grid ColumnDefinitions="Auto,*">
+                    <Panel VerticalAlignment="Top" Margin="0 1 14 0">
+                        <c:Icon Kind="download" Size="22" Foreground="#60A5FA" IsVisible="{Binding !Updates.IsFailed}" />
+                        <c:Icon Kind="error" Size="22" Foreground="#F87171" IsVisible="{Binding Updates.IsFailed}" />
+                    </Panel>
+                    <StackPanel Grid.Column="1" Spacing="6">
+                        <TextBlock Text="{Binding Updates.Title}" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <SelectableTextBlock Text="{Binding Updates.Message}" TextWrapping="Wrap" FontSize="13"
+                                             LineHeight="19" Opacity="0.8"
+                                             IsVisible="{Binding Updates.Message, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                    </StackPanel>
+                </Grid>
+
+                <Border Background="#1E1E1E" CornerRadius="6" MaxHeight="220" IsVisible="{Binding Updates.HasNotes}"
+                        BorderBrush="#3F3F46" BorderThickness="1">
+                    <ScrollViewer>
+                        <SelectableTextBlock Text="{Binding Updates.Notes}" TextWrapping="Wrap" FontSize="12"
+                                             LineHeight="18" Margin="12 10" Opacity="0.85" />
+                    </ScrollViewer>
+                </Border>
+
+                <StackPanel Spacing="6" IsVisible="{Binding Updates.IsBusy}">
+                    <ProgressBar Minimum="0" Maximum="100" Value="{Binding Updates.Progress}" Height="6"
+                                 IsIndeterminate="{Binding !Updates.IsDownloading}" />
+                    <TextBlock Text="{Binding Updates.ProgressText}" FontSize="12" Opacity="0.6"
+                               IsVisible="{Binding Updates.ProgressText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                </StackPanel>
+
+                <CheckBox Content="Check for updates when Nexus starts" FontSize="12"
+                          IsChecked="{Binding Updates.CheckOnStartup}" IsVisible="{Binding !Updates.IsBusy}" />
+
+                <Grid ColumnDefinitions="Auto,*,Auto">
+                    <Button Grid.Column="0" Content="Skip this version" Classes="toolbar" Command="{Binding Updates.SkipCommand}"
+                            IsVisible="{Binding Updates.IsAvailable}" />
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
+                        <!-- available -->
+                        <Button Content="Later" MinWidth="72" Classes="toolbar" HorizontalContentAlignment="Center"
+                                Command="{Binding Updates.LaterCommand}" IsVisible="{Binding Updates.IsAvailable}" />
+                        <Button Content="{Binding Updates.InstallButtonText}" MinWidth="96" Classes="toolbar accent"
+                                HorizontalContentAlignment="Center" Command="{Binding Updates.InstallCommand}"
+                                IsVisible="{Binding Updates.IsAvailable}" />
+                        <!-- downloading -->
+                        <Button Content="Cancel" MinWidth="88" Classes="toolbar" HorizontalContentAlignment="Center"
+                                Command="{Binding Updates.CancelCommand}" IsVisible="{Binding Updates.IsDownloading}" />
+                        <!-- failed -->
+                        <Button Content="Open installer" Classes="toolbar" Command="{Binding Updates.OpenPackageCommand}"
+                                IsVisible="{Binding Updates.CanOpenPackage}" />
+                        <Button Content="Releases page" Classes="toolbar" Command="{Binding Updates.OpenPageCommand}"
+                                IsVisible="{Binding Updates.IsFailed}" />
+                        <!-- up to date / failed -->
+                        <Button Content="OK" MinWidth="72" Classes="toolbar accent" HorizontalContentAlignment="Center"
+                                Command="{Binding Updates.LaterCommand}">
+                            <Button.IsVisible>
+                                <MultiBinding Converter="{x:Static BoolConverters.Or}">
+                                    <Binding Path="Updates.IsUpToDate" />
+                                    <Binding Path="Updates.IsFailed" />
+                                </MultiBinding>
+                            </Button.IsVisible>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </StackPanel>
+        </Border>
+    </Border>
+
     <Border Name="ConfirmOverlay" Background="#B0101010" IsVisible="False" ZIndex="1000">
         <Border MinWidth="360" MaxWidth="520" Background="#252526" CornerRadius="10" Padding="22 20"
                 HorizontalAlignment="Center" VerticalAlignment="Center"
@@ -399,6 +544,9 @@
                     <SelectableTextBlock Grid.Column="1" Name="ConfirmText" TextWrapping="Wrap" FontSize="14"
                                          LineHeight="21" />
                 </Grid>
+                <!-- Prompt mode only (folder names…); suggestions drop down as you type -->
+                <AutoCompleteBox Name="OverlayInput" IsVisible="False" MinimumPrefixLength="0"
+                                 FilterMode="ContainsOrdinal" />
                 <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
                     <Button Name="OverlayCancelButton" Content="Cancel" MinWidth="88" Classes="toolbar"
                             HorizontalContentAlignment="Center" />

@@ -18,6 +18,7 @@ namespace Nexus.Providers;
 public sealed class RedisProvider : IDatabaseProvider
 {
     public string Id => "redis";
+    public string QueryLanguage => "redis";
     public string DisplayName => "Redis";
     public string BrandColor => "#FF4438";
     public int DefaultPort => 6379;

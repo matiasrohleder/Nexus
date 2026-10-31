@@ -54,7 +54,22 @@ public sealed class SqlServerProvider : SqlProviderBase
     public override string QuoteIdent(string ident) => $"[{ident.Replace("]", "]]")}]";
 
     public override string BuildSelectQuery(string container, string obj, int limit, IReadOnlyList<ColumnInfo>? columns = null) =>
-        $"SELECT TOP {limit} {ColumnList(columns)}\nFROM {QuoteIdent(container)}.{QuoteIdent(obj)};";
+        FormatSelect($"SELECT TOP ({limit})", Qualified(container, obj) + ";", columns, null);
+
+    public override IReadOnlyList<string> DialectKeywords { get; } =
+    [
+        "TOP", "PERCENT", "WITH TIES", "NOLOCK", "WITH (NOLOCK)", "OUTPUT", "MERGE", "CROSS APPLY", "OUTER APPLY",
+        "PIVOT", "UNPIVOT", "IDENTITY", "NVARCHAR", "VARCHAR", "UNIQUEIDENTIFIER", "DATETIME2", "DATETIMEOFFSET",
+        "BIT", "MONEY", "GO", "DECLARE", "BEGIN TRAN", "COMMIT TRAN", "ROLLBACK TRAN", "EXEC", "PRINT",
+        "SET NOCOUNT ON", "OFFSET", "FETCH NEXT", "ROWS ONLY", "IF EXISTS", "TRY_CAST"
+    ];
+
+    public override IReadOnlyList<string> DialectFunctions { get; } =
+    [
+        "GETDATE", "GETUTCDATE", "SYSDATETIME", "DATEADD", "DATEDIFF", "DATEPART", "DATENAME", "EOMONTH",
+        "ISNULL", "IIF", "LEN", "CHARINDEX", "STRING_AGG", "STRING_SPLIT", "FORMAT", "CONVERT", "TRY_CONVERT",
+        "NEWID", "SCOPE_IDENTITY", "OBJECT_ID", "DB_NAME", "SUSER_SNAME", "ROW_NUMBER", "RANK", "DENSE_RANK"
+    ];
 
     public override string? BuildDropContainerSql(string container, bool cascade) =>
         $"DROP SCHEMA {QuoteIdent(container)}"; // MSSQL has no CASCADE; objects must go first

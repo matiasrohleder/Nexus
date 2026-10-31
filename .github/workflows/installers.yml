@@ -43,6 +43,11 @@ jobs:
           NEXUS_TEST_FILE=/tmp/t.db  nexus --selftest sqlite
           NEXUS_TEST_FILE=/tmp/t.duckdb nexus --selftest duckdb
 
+      - name: Self-update from the .deb (detection + apt upgrade path)
+        run: |
+          NEXUS_EXPECT_INSTALL=deb nexus --selftest updater
+          sudo env NEXUS_EXPECT_INSTALL=deb NEXUS_UPDATE_APPLY="$(ls $PWD/artifacts/Nexus-*-linux-x64.deb)" nexus --selftest updater
+
       - name: Secrets in the system keyring (GNOME Keyring via Secret Service)
         run: |
           dbus-run-session -- sh -c '
@@ -62,6 +67,7 @@ jobs:
           docker run --rm -v "$PWD/artifacts:/a" fedora:latest sh -ec '
             dnf install -y /a/Nexus-*-linux-x64.rpm
             NEXUS_TEST_FILE=/tmp/t.db nexus --selftest sqlite
+            NEXUS_EXPECT_INSTALL=rpm NEXUS_UPDATE_APPLY=$(ls /a/Nexus-*-linux-x64.rpm) nexus --selftest updater
             dnf remove -y nexus-db'
 
       - name: Install the .deb on Debian 12 and run it
@@ -74,6 +80,8 @@ jobs:
         run: |
           mkdir -p /tmp/tar && tar -C /tmp/tar -xzf artifacts/Nexus-*-linux-x64.tar.gz
           /tmp/tar/Nexus-*/install.sh
+          NEXUS_TEST_FILE=/tmp/u.db ~/.local/bin/nexus --selftest sqlite
+          NEXUS_EXPECT_INSTALL=tarball NEXUS_UPDATE_APPLY="$(ls $PWD/artifacts/Nexus-*-linux-x64.tar.gz)" ~/.local/bin/nexus --selftest updater
           NEXUS_TEST_FILE=/tmp/u.db ~/.local/bin/nexus --selftest sqlite
           /tmp/tar/Nexus-*/install.sh --uninstall && test ! -e ~/.local/bin/nexus
 
@@ -119,6 +127,8 @@ jobs:
           Run-SelfTest 'sqlite'  (Join-Path $env:RUNNER_TEMP 't.db')
           Run-SelfTest 'duckdb'  (Join-Path $env:RUNNER_TEMP 't.duckdb')
           Run-SelfTest 'secrets' ''
+          $env:NEXUS_EXPECT_INSTALL = 'windows'
+          Run-SelfTest 'updater' ''
           if (-not (Select-String -Path (Join-Path $env:RUNNER_TEMP 'selftest-secrets.log') -Pattern 'Credential Manager' -Quiet)) { throw 'secrets did not use Credential Manager' }
 
           $uninst = Join-Path $env:LOCALAPPDATA 'Programs\Nexus\unins000.exe'
@@ -165,6 +175,15 @@ jobs:
           run() { if [ "${{ matrix.rid }}" = osx-x64 ]; then arch -x86_64 "$@"; else "$@"; fi; }
           NEXUS_TEST_FILE=/tmp/t.db      run /tmp/Nexus.app/Contents/MacOS/Nexus --selftest sqlite
           NEXUS_TEST_FILE=/tmp/t.duckdb  run /tmp/Nexus.app/Contents/MacOS/Nexus --selftest duckdb
+
+      - name: Self-update of the .app bundle (swap from the .dmg while running)
+        run: |
+          run() { if [ "${{ matrix.rid }}" = osx-x64 ]; then arch -x86_64 "$@"; else "$@"; fi; }
+          dmg=$(ls $PWD/artifacts/Nexus-*-macos-*.dmg)
+          NEXUS_EXPECT_INSTALL=macos NEXUS_UPDATE_APPLY="$dmg" run /tmp/Nexus.app/Contents/MacOS/Nexus --selftest updater
+          test ! -e /tmp/.Nexus-old.app && test ! -e /tmp/.Nexus-update.app
+          codesign --verify --deep --strict /tmp/Nexus.app
+          NEXUS_TEST_FILE=/tmp/t2.db run /tmp/Nexus.app/Contents/MacOS/Nexus --selftest sqlite
 
       - name: Secrets in the macOS Keychain
         run: |

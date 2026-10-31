@@ -20,8 +20,8 @@ python3 packaging/generate-icons.py   # regenerate every icon format from code (
 ```
 
 `.github/workflows/installers.yml` builds all installers on every push, really installs them on
-Windows/macOS/Ubuntu (+ Fedora/Debian containers) and runs `--selftest sqlite|duckdb|secrets`
-against the installed app. A tag `v<Version>` publishes a GitHub Release.
+Windows/macOS/Ubuntu (+ Fedora/Debian containers) and runs `--selftest sqlite|duckdb|secrets|updater`
+against the installed app (updater re-applies the built package through the in-app update path). A tag `v<Version>` publishes a GitHub Release.
 
 ### Tests (self-test matrix against real databases)
 
@@ -40,6 +40,12 @@ NEXUS_TEST_FILE=/tmp/t.db dotnet run -- --selftest sqlite    # file-based engine
 
 # OS keyring round-trip, legacy migration, and "connections.json has no secrets"
 dotnet run -- --selftest secrets
+
+# Self-updater: version order, release parsing, asset names, checksums, live feed (info only).
+# NEXUS_EXPECT_INSTALL=windows|macos|deb|rpm|tarball|manual asserts the detected install kind;
+# NEXUS_UPDATE_APPLY=<package> installs it over this copy (latest = download from the feed);
+# NEXUS_UPDATE_FEED=<url> replaces the GitHub releases/latest URL (fake releases for testing).
+dotnet run -- --selftest updater
 ```
 
 Self-tests must never touch the user's real data: they call `SecretStore.UseEphemeral()` (engine
@@ -127,11 +133,41 @@ driver. Key ideas that span multiple files:
   (driver `ClearPool` per opened profile incl. pinned clones; Mongo unregisters its cluster —
   `MongoClient.Dispose` doesn't). The tree shows a status dot per connection
   (`TreeNodeViewModel.IsConnected`/`HasConnectError`), synced from `ConnectionStatus.Changed`.
+- **Self-update** (`Services/Updater` + `UpdateViewModel`, overlay in `MainWindow`): reads
+  GitHub `releases/latest`, compares semver with `AppInfo.Version`, and picks the asset by
+  `InstallKind`, detected from `AppContext.BaseDirectory` (Inno `unins000.exe`, `.app` bundle,
+  `/opt/nexus` owned by dpkg/rpm, `$XDG_DATA_HOME/nexus/app` = tarball, else `Manual` → release
+  page). Downloads are verified against the asset's GitHub `digest` (fallback `SHA256SUMS.txt`).
+  Install goes through the platform's own upgrade path — Inno `/SILENT /RELAUNCH=1` (nexus.iss
+  relaunches), `.app` swap via `ditto`, `pkexec apt-get|dnf|zypper install`, tarball
+  `install.sh` — so the OS keeps seeing one package. After installing, files of the running
+  version may already be replaced: always relaunch (`RelaunchAfterExit`, waits for our PID) and
+  quit immediately. **Asset names are a contract** with `AssetNameFor`: renaming installers in the
+  packaging scripts breaks updates for every installed copy.
 - `SavedConnection` equality is by `Id`, so database-pinned clones match their profile in
   pickers and `IndexOf`.
 - **Singletons**: `QueryProfiler.Instance` (all query logging; UI-thread marshalled unless
-  `DirectDispatch`), `QueryHistoryStore.Instance`, `SchemaCache` (autocomplete words per
-  connection; invalidate on tree refresh).
+  `DirectDispatch`), `QueryHistoryStore.Instance`, `SchemaCache` (per connection+database
+  `SchemaSnapshot`: containers/objects up front, columns on demand; invalidate on tree refresh),
+  `AppSettings.Current` (always use it — separate `Load()`ed copies would overwrite each other).
+- **Query editor language** (`Services/SqlLanguage` lexer → `SqlCompletion` + `Views/QueryColorizer`):
+  one forgiving tokenizer feeds both highlighting and context-aware completion. Providers add
+  `DialectKeywords`/`DialectFunctions` and `QueryLanguage` ("sql"/"mongo"/"redis"); no
+  TextMate/native deps. Completion inserts names via `IDatabaseProvider.Ident` (quotes only when
+  needed: odd chars, reserved words, or case the engine would fold — `UnquotedCase`).
+  `SchemaCache.Changed` redraws editors; after `Invalidate` views use `TryGet` (an eager `Get`
+  would reconnect a connection the user just disconnected).
+- **Generated SELECTs** (`SqlProviderBase.FormatSelect`): `SELECT` alone, one column per line
+  indented 4 spaces, `FROM`, then the dialect limit (`SELECT TOP (n)` on SQL Server).
+- **Explorer folders/order**: order = order of `Connections` (connections.json);
+  `SavedConnection.Folder` names its folder; folder list/order + collapsed state live in
+  `settings.json` (`AppSettings.Folders`/`CollapsedFolders`). `ConnectionNodes` is only the
+  top level (folders, then ungrouped roots) and is rebuilt by `RebuildTree()` from those, reusing
+  connection root nodes from `_roots` (by Id) so expansion/loaded children survive. Never index
+  `ConnectionNodes` in parallel with `Connections`. Drag and drop: `MainWindow` code-behind →
+  `ResolveDrop`/`MoveNode`.
+- **Font sizes**: `UiFonts` writes the `EditorFontSize`/`GridFontSize` app resources (bind with
+  `DynamicResource`) and persists them.
 
 ### Avalonia gotchas specific to this repo
 
@@ -144,6 +180,8 @@ driver. Key ideas that span multiple files:
   longer propagates to it in Avalonia 12 (the context menu then acted on a stale node).
 - The explorer context menu shows items per node kind via flags on `TreeNodeViewModel`
   (`IsQueryable`, `IsTable`, `CanDrop`, `CanOpenQuery`…); add new actions the same way.
+- A `GridSplitter` must sit between two resizable (star/pixel) rows; next to an `Auto` row it
+  resizes that row instead (the query/results splitter used to border the error banner).
 - Don't put `Padding` on a `ScrollViewer`: it isn't subtracted when measuring the content, so
   wide children overflow. Use a `Margin` on the content instead.
 - A transparent `Background` still hit-tests: an empty control layered over another (e.g. the
@@ -172,7 +210,8 @@ and inject into the VM.
 
 ## Versioning
 
-Semantic versioning starting at **0.1.0** (0.2.0 = OS keyring + installers; 0.3.0 = connect/disconnect + explorer fixes). The single source of truth is `<Version>` in
+Semantic versioning starting at **0.1.0** (0.2.0 = OS keyring + installers; 0.3.0 = connect/disconnect + explorer fixes; 0.4.0 = SQL
+completion/highlighting, responsive grids, self-update). The single source of truth is `<Version>` in
 `Nexus.csproj`; `Services/AppInfo.cs` reads it from the assembly at runtime and the top bar
 renders it as "Nexus — {version}" (`MainWindowViewModel.VersionText`); the packaging scripts
 read it from the csproj too. To release: bump `<Version>`, commit, push tag `v<Version>`.
@@ -187,10 +226,15 @@ Don't hardcode the version anywhere else.
 - New query tabs start **empty**; the **profiler starts off** (opt-in).
 - Connections **start disconnected** and connect only when the user expands them; right-click
   offers Connect/Disconnect, and a dot shows the state (gray hollow / green / red).
-- "View Data" generates an **explicit, line-broken column list** (one column per line, dialect
-  LIMIT/TOP/FETCH), falling back to `*` only if introspection fails.
+- "Select Top 1000 Rows" (default, also double-click) and "Select Top 200 Rows" generate an
+  **explicit, line-broken column list** (one column per line, dialect LIMIT/TOP/FETCH), falling
+  back to `*` only if introspection fails.
+- Result/data grids show **row numbers** and the results toolbar a row count.
 - Query errors must be loud: red selectable banner above results + Messages tab + status.
 - Run = F5 **and** Ctrl+Enter. Selection-aware (runs highlighted text if any).
+- Updates: checked on startup (opt-out checkbox in the dialog, `AppSettings.CheckForUpdatesOnStartup`),
+  manual "Check for updates…" in the ⋯ menu, "Skip this version" silences only the startup prompt,
+  and a top-bar "Update to x.y.z" badge stays while an update is pending. Never update silently.
 
 ## Next steps (roadmap)
 
@@ -200,15 +244,13 @@ Pending work, roughly in priority order:
    and a Restore section in the Server panel).
 2. **User management actions** — create/drop user, change password (Server panel lists users
    read-only today).
-3. **Per-dialect syntax highlighting** via `AvaloniaEdit.TextMate` (current highlighting is the
-   built-in generic SQL definition; Mongo/Redis tabs get no highlighting).
-4. **EXPLAIN for SQL Server and Oracle** (need `SHOWPLAN`/`PLAN_TABLE` flows, not a statement
+3. **EXPLAIN for SQL Server and Oracle** (need `SHOWPLAN`/`PLAN_TABLE` flows, not a statement
    prefix; `SupportsExplain=false` today).
-5. **Window state persistence** (size/position/splitter widths in `AppSettings`) and a
+4. **Window state persistence** (size/position/splitter widths in `AppSettings`) and a
    light-theme toggle.
-6. **Code signing**: buy/configure a Windows Authenticode cert and an Apple Developer ID so the
+5. **Code signing**: buy/configure a Windows Authenticode cert and an Apple Developer ID so the
    installers open without SmartScreen/Gatekeeper prompts (the scripts already accept them).
-7. **CSV import for ClickHouse** (fails today — no transactions; needs a batch INSERT path).
-8. **Result grid virtualization / paging beyond the 10k row cap** for very wide result sets.
-9. **CI for the engine matrix**: the installers workflow covers SQLite/DuckDB/secrets; add the
+6. **CSV import for ClickHouse** (fails today — no transactions; needs a batch INSERT path).
+7. **Result grid virtualization / paging beyond the 10k row cap** for very wide result sets.
+8. **CI for the engine matrix**: the installers workflow covers SQLite/DuckDB/secrets; add the
    Docker engines (`--selftest` loop), Oracle gated behind a flag because of its size.

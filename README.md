@@ -34,18 +34,26 @@ transactions with rollback.
 - Redesigned dialog: engine tiles, **smart defaults per engine** (port/user/database),
   **paste a URL** (`postgres://user:pass@host/db`, `mongodb://…`, ADO.NET strings) to auto-fill,
   file picker for SQLite/DuckDB, color swatches, Enter = Test.
+- **Folders** and custom order in the explorer: drag and drop, or right-click › Move Up/Down /
+  Move to Folder…; **Collapse all** button in the sidebar header.
 
 ### Query editor
-- Multi-tab, syntax highlighting, line numbers; **F5 / Ctrl+Enter** runs (selection-aware).
+- Multi-tab, line numbers; **F5 / Ctrl+Enter** runs (selection-aware).
+- **Schema-aware highlighting** (VS Code Dark+ colors): keywords, functions, strings, numbers,
+  comments, and your tables/columns in their own colors. Mongo and Redis tabs too.
+- **Autocomplete as you type** (or Ctrl+Space), by context: tables after `FROM`/`JOIN`, columns
+  of the tables in the query in `SELECT`/`WHERE`/`ORDER BY`, `alias.` → that table's columns,
+  per-dialect keywords and functions (`OR` → `ORDER BY`).
 - **Stop button** — real query cancellation.
-- **Ctrl+Space autocomplete** — SQL keywords + your schemas/tables/columns.
+- Numbered result rows with a row count; **font size** via Ctrl+= / Ctrl+- / Ctrl+0 or
+  Ctrl+mouse wheel (editor and grids).
 - **EXPLAIN** button (engines that support it), export results to **CSV/JSON**,
   open/save **.sql** files (Ctrl+O/Ctrl+S), results capped at 10 000 rows to protect memory.
 
 ### Administration
 - **Edit Data** grid: insert/update/delete rows with PK detection, committed in one
   transaction (all-or-nothing); tables without a PK open read-only.
-- Object explorer context menu: View Data, Edit Data, **View DDL**, **Import CSV**,
+- Object explorer context menu: Select Top 1000 / Top 200 Rows, Edit Data, **View DDL**, **Import CSV**,
   Truncate, Drop (with confirmation).
 - **Server panel** per connection: active sessions + **Kill**, users/roles, table sizes,
   server variables (filterable), **Backup** (runs the engine's tool if installed — pg_dump,
@@ -116,6 +124,30 @@ tar xzf Nexus-<version>-linux-x64.tar.gz
 
 Then open **Nexus** from your applications menu, or run `nexus` in a terminal. Uninstall with
 `sudo apt remove nexus-db` or `sudo dnf remove nexus-db`.
+
+### Updates
+
+From **0.4.0** on, Nexus updates itself. When it starts it checks GitHub for a newer release and
+offers it (**Update now**, **Later** or **Skip this version**); you can also check any time from
+**⋯ → Check for updates…**, and turn the startup check off in that dialog. *Update now*
+downloads the installer for your system, verifies its SHA-256 checksum, installs it in place and
+restarts Nexus — your connections, passwords and settings are kept:
+
+| Installed with | How Nexus updates it |
+|---|---|
+| Windows setup | Runs the new setup silently over the current install, then reopens Nexus |
+| macOS `.dmg` | Replaces `Nexus.app` with the new one (no drag and drop needed) |
+| `.deb` / `.rpm` | Upgrades the package with `apt` / `dnf` (`zypper` on openSUSE), asking for your password |
+| `.tar.gz` | Re-runs `install.sh` for your user (no password) |
+
+Copies that weren't installed by an installer (e.g. built from source) link to the release page
+instead. Versions before 0.4.0 can't update themselves — install 0.4.0 once by hand.
+
+**Upgrading by hand on Linux:** install the new package over the old one —
+`sudo apt install ./Nexus-<version>-linux-x64.deb` (or `sudo dnf install ./…rpm`). There is no
+need to uninstall first. Some software centers (e.g. Ubuntu's App Center) only say *"installed"*
+when a `.deb` with the same name is already present instead of offering the upgrade; use the
+command above or the in-app update.
 
 ## Your data and passwords
 
@@ -190,7 +222,8 @@ Providers/   IDatabaseProvider (capability-based contract) · SqlProviderBase (s
              Postgres · MySql/MariaDb · SqlServer · Oracle · Sqlite · DuckDb · ClickHouse
              Mongo (mongosh-style parser) · Redis (command tokenizer + INSPECT)
 Services/    SecretStore (OS keyrings) · ConnectionStore · QueryProfiler · QueryHistoryStore
-             SchemaCache (autocomplete) · CsvService · BackupService · AppSettings
+             SqlLanguage (lexer) · SqlCompletion · SchemaCache · CsvService · BackupService
+             AppSettings · UiFonts
 ViewModels/  MainWindow · ConnectionEditor · QueryDocument · TableEditor · ServerAdmin · Profiler
 Views/       Avalonia XAML (dark, IDE-style; sidebar dockable left/right)
 ```

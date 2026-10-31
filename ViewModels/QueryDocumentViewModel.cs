@@ -29,8 +29,19 @@ public partial class QueryDocumentViewModel : DocumentViewModel
     [ObservableProperty] private string _errorText = string.Empty;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasMultipleResults))]
+    [NotifyPropertyChangedFor(nameof(HasMultipleResults), nameof(ResultSummary))]
     private QueryResult? _selectedResult;
+
+    /// <summary>Row count of the shown result set ("1,234 rows"), next to the export buttons.</summary>
+    public string ResultSummary => SelectedResult switch
+    {
+        null or { HasError: true } => "",
+        { HasResultSet: true, IsTruncated: true } r =>
+            $"{r.Rows.Count:N0} rows (truncated at {SqlProviderBase.MaxRowsPerResult:N0})",
+        { HasResultSet: true } r => r.Rows.Count == 1 ? "1 row" : $"{r.Rows.Count:N0} rows",
+        { RecordsAffected: >= 0 } r => $"{r.RecordsAffected:N0} row(s) affected",
+        _ => ""
+    };
 
     public ObservableCollection<QueryResult> Results { get; } = new();
     public bool HasMultipleResults => Results.Count > 1;
@@ -72,13 +83,21 @@ public partial class QueryDocumentViewModel : DocumentViewModel
         }
     }
 
-    partial void OnSelectedDatabaseChanged(string? value) => OnPropertyChanged(nameof(DatabaseChoice));
+    partial void OnSelectedDatabaseChanged(string? value)
+    {
+        OnPropertyChanged(nameof(DatabaseChoice));
+        OnPropertyChanged(nameof(SchemaConnection));
+    }
+
+    /// <summary>Connection+database the editor's completion and highlighting describe.</summary>
+    public SavedConnection? SchemaConnection => EffectiveConnection;
 
     partial void OnConnectionChanged(SavedConnection? value)
     {
         OnPropertyChanged(nameof(ConnectionChoice));
         OnPropertyChanged(nameof(ConnectionName));
         OnPropertyChanged(nameof(SupportsExplain));
+        OnPropertyChanged(nameof(SchemaConnection));
         SelectedDatabase = null;
         _ = LoadDatabasesAsync();
     }

@@ -61,7 +61,21 @@ public class MySqlProvider : SqlProviderBase
     public override string QuoteIdent(string ident) => $"`{ident.Replace("`", "``")}`";
 
     public override string BuildSelectQuery(string container, string obj, int limit, IReadOnlyList<ColumnInfo>? columns = null) =>
-        $"SELECT {ColumnList(columns)}\nFROM {QuoteIdent(container)}.{QuoteIdent(obj)}\nLIMIT {limit};";
+        FormatSelect("SELECT", Qualified(container, obj), columns, $"LIMIT {limit};");
+
+    public override IReadOnlyList<string> DialectKeywords { get; } =
+    [
+        "AUTO_INCREMENT", "ENGINE", "INNODB", "UNSIGNED", "TINYINT", "MEDIUMTEXT", "LONGTEXT", "DATETIME",
+        "ENUM", "ON DUPLICATE KEY UPDATE", "INSERT IGNORE", "REPLACE INTO", "STRAIGHT_JOIN", "SHOW TABLES",
+        "SHOW DATABASES", "SHOW CREATE TABLE", "DESCRIBE", "USE", "REGEXP", "RLIKE", "LOCK TABLES", "UNLOCK TABLES"
+    ];
+
+    public override IReadOnlyList<string> DialectFunctions { get; } =
+    [
+        "NOW", "CURDATE", "CURTIME", "DATE_FORMAT", "DATE_ADD", "DATE_SUB", "DATEDIFF", "STR_TO_DATE",
+        "UNIX_TIMESTAMP", "FROM_UNIXTIME", "IFNULL", "IF", "CONCAT_WS", "GROUP_CONCAT", "JSON_EXTRACT",
+        "JSON_OBJECT", "JSON_ARRAYAGG", "LAST_INSERT_ID", "UUID", "FIND_IN_SET", "ROW_NUMBER", "RANK"
+    ];
 
     /// <summary>MySQL containers are databases; DROP DATABASE removes everything inside.</summary>
     public override string? BuildDropContainerSql(string container, bool cascade) =>

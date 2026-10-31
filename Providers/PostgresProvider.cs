@@ -56,7 +56,25 @@ public sealed class PostgresProvider : SqlProviderBase
     public override string QuoteIdent(string ident) => $"\"{ident.Replace("\"", "\"\"")}\"";
 
     public override string BuildSelectQuery(string container, string obj, int limit, IReadOnlyList<ColumnInfo>? columns = null) =>
-        $"SELECT {ColumnList(columns)}\nFROM {QuoteIdent(container)}.{QuoteIdent(obj)}\nLIMIT {limit};";
+        FormatSelect("SELECT", Qualified(container, obj), columns, $"LIMIT {limit};");
+
+    protected override IdentifierCase UnquotedCase => IdentifierCase.Lower;
+
+    public override IReadOnlyList<string> DialectKeywords { get; } =
+    [
+        "ILIKE", "NOT ILIKE", "SIMILAR TO", "RETURNING", "ON CONFLICT", "DO NOTHING", "DO UPDATE SET",
+        "DISTINCT ON", "LATERAL", "FETCH FIRST", "ROWS ONLY", "SERIAL", "BIGSERIAL", "JSONB", "UUID",
+        "TIMESTAMPTZ", "BYTEA", "TEXT", "BOOLEAN", "ARRAY", "VACUUM", "ANALYZE", "MATERIALIZED VIEW",
+        "REFRESH MATERIALIZED VIEW", "CREATE EXTENSION", "TABLESAMPLE", "FILTER", "WINDOW", "NULLS FIRST", "NULLS LAST"
+    ];
+
+    public override IReadOnlyList<string> DialectFunctions { get; } =
+    [
+        "NOW", "STRING_AGG", "ARRAY_AGG", "JSONB_AGG", "JSON_AGG", "JSONB_BUILD_OBJECT", "JSON_BUILD_OBJECT",
+        "TO_CHAR", "TO_DATE", "TO_TIMESTAMP", "DATE_TRUNC", "DATE_PART", "AGE", "GENERATE_SERIES",
+        "GEN_RANDOM_UUID", "UNNEST", "REGEXP_REPLACE", "REGEXP_MATCHES", "SPLIT_PART", "PG_SIZE_PRETTY",
+        "PG_TOTAL_RELATION_SIZE", "CURRENT_SCHEMA", "STRING_TO_ARRAY", "ARRAY_LENGTH", "ROW_NUMBER", "RANK", "DENSE_RANK"
+    ];
 
     public override string? BuildDropContainerSql(string container, bool cascade) =>
         $"DROP SCHEMA {QuoteIdent(container)}{(cascade ? " CASCADE" : "")}";

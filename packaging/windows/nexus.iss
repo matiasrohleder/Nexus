@@ -58,3 +58,11 @@ Name: "{autodesktop}\Nexus"; Filename: "{app}\Nexus.exe"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\Nexus.exe"; Description: "{cm:LaunchProgram,Nexus}"; Flags: nowait postinstall skipifsilent
+; In-app updates run this setup with /SILENT /RELAUNCH=1: reopen Nexus (not elevated) when done.
+Filename: "{app}\Nexus.exe"; Flags: nowait runasoriginaluser; Check: RelaunchRequested
+
+[Code]
+function RelaunchRequested: Boolean;
+begin
+  Result := ExpandConstant('{param:RELAUNCH|0}') = '1';
+end;
