@@ -64,7 +64,8 @@ public static class SelfTestUpdater
               Updater.AssetNameFor(InstallKind.WindowsSetup, "1.2.0", Architecture.X64) == "Nexus-1.2.0-windows-x64-setup.exe" &&
               Updater.AssetNameFor(InstallKind.Manual, "1.2.0", Architecture.X64) is null,
             "asset names match the packaging scripts");
-        Check(Updater.BundleOf("/Applications/Nexus.app/Contents/MacOS/") == "/Applications/Nexus.app" &&
+        // Path APIs turn "/" into backslashes on Windows; this only runs on macOS but is checked everywhere.
+        Check(Updater.BundleOf("/Applications/Nexus.app/Contents/MacOS/")?.Replace('\\', '/') == "/Applications/Nexus.app" &&
               Updater.BundleOf("/opt/nexus/") is null,
             "macOS bundle path resolved from the executable folder");
 
