@@ -410,5 +410,6 @@ public partial class QueryDocumentView : UserControl
         }
 
         ResultsGrid.ItemsSource = result.Rows;
+        GridColumns.FillLastColumn(ResultsGrid);
     }
 }

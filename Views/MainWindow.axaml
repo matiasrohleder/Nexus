@@ -64,14 +64,8 @@
                                 <Button Classes="icon" ToolTip.Tip="Add connection" Command="{Binding AddConnectionCommand}">
                                     <c:Icon Kind="plus" Size="16" />
                                 </Button>
-                                <Button Classes="icon" ToolTip.Tip="Edit selected connection" Command="{Binding EditConnectionCommand}">
-                                    <c:Icon Kind="edit" Size="15" />
-                                </Button>
                                 <Button Classes="icon" ToolTip.Tip="Refresh" Command="{Binding RefreshConnectionCommand}">
                                     <c:Icon Kind="refresh" Size="15" />
-                                </Button>
-                                <Button Classes="icon" ToolTip.Tip="Remove selected connection" Command="{Binding RemoveConnectionCommand}">
-                                    <c:Icon Kind="trash" Size="15" />
                                 </Button>
                                 <Button Classes="icon" ToolTip.Tip="Collapse all" Command="{Binding CollapseAllCommand}">
                                     <c:Icon Kind="collapse" Size="15" />
@@ -162,7 +156,9 @@
                                 </MenuItem>
                                 <MenuItem Header="Select Top 200 Rows" Command="{Binding OpenTableTop200Command}"
                                           CommandParameter="{Binding SelectedNode}"
-                                          IsVisible="{Binding SelectedNode.IsQueryable}" />
+                                          IsVisible="{Binding SelectedNode.IsQueryable}">
+                                    <MenuItem.Icon><c:Icon Kind="search" /></MenuItem.Icon>
+                                </MenuItem>
                                 <MenuItem Header="Edit Data" Command="{Binding EditTableDataCommand}"
                                           CommandParameter="{Binding SelectedNode}"
                                           IsVisible="{Binding SelectedNode.IsTable}">

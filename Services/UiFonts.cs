@@ -12,6 +12,9 @@ public static class UiFonts
 {
     public const double Min = 8, Max = 36;
 
+    /// <summary>Raised on the UI thread after the sizes change (grids re-measure their columns).</summary>
+    public static event Action? Changed;
+
     public static double Editor => AppSettings.Current.EditorFontSize;
     public static double Grid => AppSettings.Current.GridFontSize;
 
@@ -21,6 +24,8 @@ public static class UiFonts
         if (Application.Current is not { } app) return;
         app.Resources["EditorFontSize"] = Clamp(AppSettings.Current.EditorFontSize);
         app.Resources["GridFontSize"] = Clamp(AppSettings.Current.GridFontSize);
+        // Text height plus a little breathing room: 12 → 26, 15 → 31.
+        app.Resources["GridRowHeight"] = Math.Round(Clamp(AppSettings.Current.GridFontSize) * 1.6 + 7);
     }
 
     public static void ChangeEditor(double delta) => Set(Editor + delta, Grid);
@@ -37,6 +42,7 @@ public static class UiFonts
         AppSettings.Current.GridFontSize = Clamp(grid);
         AppSettings.Current.Save();
         Apply();
+        Changed?.Invoke();
     }
 
     private static double Clamp(double size) => Math.Clamp(Math.Round(size), Min, Max);

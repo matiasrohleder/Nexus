@@ -20,6 +20,7 @@
         <!-- User-adjustable (Services/UiFonts overwrites these from settings.json at startup) -->
         <x:Double x:Key="EditorFontSize">14</x:Double>
         <x:Double x:Key="GridFontSize">12</x:Double>
+        <x:Double x:Key="GridRowHeight">28</x:Double>
     </Application.Resources>
 
     <Application.DataTemplates>
@@ -94,7 +95,7 @@
         <Style Selector="DataGridColumnHeader">
             <Setter Property="Background" Value="#2D2D30" />
             <Setter Property="Foreground" Value="#D4D4D8" />
-            <Setter Property="FontSize" Value="{DynamicResource GridFontSize}" />
+            <Setter Property="FontSize" Value="12" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Padding" Value="10 0" />
             <Setter Property="MinHeight" Value="30" />
@@ -109,6 +110,21 @@
         </Style>
         <Style Selector="DataGrid /template/ Rectangle#PART_ColumnHeadersAndRowsSeparator">
             <Setter Property="Fill" Value="#3F3F46" />
+        </Style>
+
+        <!-- The DataGrid theme pins cell text to its own size; follow the user's grid font size instead -->
+        <Style Selector="DataGrid.numbered DataGridCell, DataGrid.numbered DataGridColumnHeader">
+            <Setter Property="FontSize" Value="{DynamicResource GridFontSize}" />
+        </Style>
+        <!-- Row height follows the font (the theme's fixed 32px minimum wasted space at small sizes) -->
+        <Style Selector="DataGrid.numbered">
+            <Setter Property="RowHeight" Value="{DynamicResource GridRowHeight}" />
+        </Style>
+        <Style Selector="DataGrid.numbered DataGridRow, DataGrid.numbered DataGridCell, DataGrid.numbered DataGridRowHeader">
+            <Setter Property="MinHeight" Value="0" />
+        </Style>
+        <Style Selector="DataGrid.numbered DataGridColumnHeader">
+            <Setter Property="MinHeight" Value="{DynamicResource GridRowHeight}" />
         </Style>
 
         <!-- Row numbers in result/data grids -->

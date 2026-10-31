@@ -22,8 +22,16 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         DataContextChanged += OnDataContextChanged;
+        // After the layout picks up the new font, re-measure every visible grid's columns.
+        Services.UiFonts.Changed += () => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            foreach (var grid in this.GetVisualDescendants().OfType<DataGrid>())
+                GridColumns.RefreshAutoWidths(grid);
+        }, Avalonia.Threading.DispatcherPriority.Background);
         // handledEventsToo: TreeViewItem marks double-taps handled after toggling expansion.
         ExplorerTree.AddHandler(DoubleTappedEvent, OnExplorerDoubleTapped, RoutingStrategies.Bubble, handledEventsToo: true);
+        // A click anywhere on a row expands/collapses it, not only on the small arrow.
+        ExplorerTree.AddHandler(TappedEvent, OnExplorerTapped, RoutingStrategies.Bubble, handledEventsToo: true);
         // Right-click doesn't select a TreeViewItem by default; do it so the context menu
         // targets the node under the cursor (tunnel = runs before the menu opens).
         ExplorerTree.AddHandler(PointerPressedEvent, OnExplorerPointerPressed, RoutingStrategies.Tunnel);
@@ -225,6 +233,16 @@ public partial class MainWindow : Window
     {
         var dialog = new ConnectionEditorWindow { DataContext = editorVm };
         return await dialog.ShowDialog<bool>(this);
+    }
+
+    private void OnExplorerTapped(object? sender, TappedEventArgs e)
+    {
+        // The arrow (a ToggleButton in the item template) already toggles by itself.
+        var ancestors = (e.Source as Visual)?.GetSelfAndVisualAncestors().ToList();
+        if (ancestors is null || ancestors.OfType<Avalonia.Controls.Primitives.ToggleButton>().Any()) return;
+        if (ancestors.OfType<TreeViewItem>().FirstOrDefault() is not { } item) return;
+        if (item.DataContext is TreeNodeViewModel { Children.Count: > 0 } node)
+            node.IsExpanded = !node.IsExpanded;
     }
 
     private void OnExplorerDoubleTapped(object? sender, TappedEventArgs e)

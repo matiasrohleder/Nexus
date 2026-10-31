@@ -57,5 +57,6 @@ public partial class TableEditorView : UserControl
         }
 
         EditGrid.ItemsSource = _vm.Rows;
+        GridColumns.FillLastColumn(EditGrid);
     }
 }
