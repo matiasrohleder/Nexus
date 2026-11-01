@@ -9,18 +9,21 @@ A **lightweight, cross-OS database administrator**. Built with **C# / .NET 10 + 
 
 ## Supported engines (10)
 
-| Engine | Query | Explorer | Row editing | Sessions/Kill | Users | Activity profiler | Backup |
+| Engine | Query | Explorer | Row editing | Sessions/Kill | Users | Activity profiler | Backup / Restore |
 |---|---|---|---|---|---|---|---|
-| PostgreSQL | SQL | ✔ | ✔ | ✔ | ✔ | ✔ pg_stat_activity | pg_dump |
-| MySQL | SQL | ✔ | ✔ | ✔ | ✔ | ✔ processlist | mysqldump |
-| MariaDB | SQL | ✔ | ✔ | ✔ | ✔ | ✔ processlist | mariadb-dump |
-| SQL Server | SQL | ✔ | ✔ | ✔ | ✔ | ✔ dm_exec_requests | hint |
-| Oracle | SQL | ✔ | ✔ | ✔ | ✔ | ✔ v$session | hint |
-| SQLite | SQL | ✔ | ✔ | — | — | — | sqlite3 |
-| DuckDB | SQL | ✔ | ✔ | — | — | — | ✔ built-in |
-| ClickHouse | SQL | ✔ | read-only | ✔ | ✔ | ✔ system.processes | hint |
-| MongoDB | mongosh-style | ✔ collections | — | ✔ killOp | ✔ | ✔ currentOp | mongodump |
-| Redis | commands + INSPECT | ✔ keys (SCAN) | — | ✔ CLIENT KILL | ✔ ACL | ✔ SLOWLOG | redis-cli |
+| PostgreSQL | SQL | ✔ | ✔ | ✔ | ✔ | ✔ pg_stat_activity | pg_dump / pg_restore, psql ¹ |
+| MySQL | SQL | ✔ | ✔ | ✔ | ✔ | ✔ processlist | mysqldump / mysql ¹ |
+| MariaDB | SQL | ✔ | ✔ | ✔ | ✔ | ✔ processlist | mariadb-dump / mariadb ¹ |
+| SQL Server | SQL | ✔ | ✔ | ✔ | ✔ | ✔ dm_exec_requests | ✔ built-in (BACKUP/RESTORE, server-side path) |
+| Oracle | SQL | ✔ | ✔ | ✔ | ✔ | ✔ v$session | — |
+| SQLite | SQL | ✔ | ✔ | — | — | — | ✔ built-in (online backup API) |
+| DuckDB | SQL | ✔ | ✔ | — | — | — | ✔ built-in (EXPORT/IMPORT DATABASE) |
+| ClickHouse | SQL | ✔ | read-only | ✔ | ✔ | ✔ system.processes | — |
+| MongoDB | mongosh-style | ✔ collections | — | ✔ killOp | ✔ | ✔ currentOp | mongodump / mongorestore ¹ |
+| Redis | commands + INSPECT | ✔ keys (SCAN) | — | ✔ CLIENT KILL | ✔ ACL | ✔ SLOWLOG | redis-cli ¹ (backup only) |
+
+¹ Uses the engine's own command-line client when it is installed — Nexus never bundles or
+downloads them. Install only the clients of the engines you back up (e.g. `postgresql-client`).
 
 Every engine is exercised by an automated end-to-end test matrix against real instances
 (`--selftest <engine>`): connect, CRUD, introspection, PK detection, DDL, stats, sessions,
@@ -55,9 +58,14 @@ transactions with rollback.
   transaction (all-or-nothing); tables without a PK open read-only.
 - Object explorer context menu: Select Top 1000 / Top 200 Rows, Edit Data, **View DDL**, **Import CSV**,
   Truncate, Drop (with confirmation).
+- **Backup… / Restore…** on a database (or on the connection, for SQLite/DuckDB/Redis):
+  live log, cancel, restore into the same or a new database (created if missing), optional
+  "replace existing data". Backups are written to a temporary file and only moved into place
+  when complete; PostgreSQL restores run in a single transaction. The dialog says which client
+  tool it uses, how to install a missing one, and lets you locate it by hand. Passwords are
+  handed to the tools via environment / owner-only temp files, never on the command line.
 - **Server panel** per connection: active sessions + **Kill**, users/roles, table sizes,
-  server variables (filterable), **Backup** (runs the engine's tool if installed — pg_dump,
-  mysqldump, mongodump, redis-cli, sqlite3; DuckDB uses native `EXPORT DATABASE`).
+  server variables (filterable).
 
 ### Profiler & history
 - **Profiler**: every query Nexus runs + optional **server activity** polling (queries from
@@ -221,10 +229,12 @@ dotnet run -- --selftest secrets
 Providers/   IDatabaseProvider (capability-based contract) · SqlProviderBase (shared ADO.NET)
              Postgres · MySql/MariaDb · SqlServer · Oracle · Sqlite · DuckDb · ClickHouse
              Mongo (mongosh-style parser) · Redis (command tokenizer + INSPECT)
+             Backup/ (IBackupStrategy per engine · BackupRunner)
 Services/    SecretStore (OS keyrings) · ConnectionStore · QueryProfiler · QueryHistoryStore
-             SqlLanguage (lexer) · SqlCompletion · SchemaCache · CsvService · BackupService
+             SqlLanguage (lexer) · SqlCompletion · SchemaCache · CsvService · ExternalTools
              AppSettings · UiFonts
 ViewModels/  MainWindow · ConnectionEditor · QueryDocument · TableEditor · ServerAdmin · Profiler
+             BackupDialog
 Views/       Avalonia XAML (dark, IDE-style; sidebar dockable left/right)
 ```
 

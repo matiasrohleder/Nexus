@@ -56,6 +56,7 @@ Maintainer: $MAINTAINER
 Installed-Size: $SIZE_KB
 Depends: libc6, libgcc-s1, libstdc++6, zlib1g, libfontconfig1, libx11-6, libice6, libsm6, libxi6, libxrandr2, libxcursor1, libssl3 | libssl3t64 | libssl1.1
 Recommends: libsecret-1-0, gnome-keyring | kwalletmanager | keepassxc
+Suggests: postgresql-client, default-mysql-client | mariadb-client, mongodb-database-tools, redis-tools
 Section: database
 Priority: optional
 Homepage: $HOMEPAGE
@@ -95,6 +96,7 @@ Requires:       libX11.so.6$LIB64, libICE.so.6$LIB64, libSM.so.6$LIB64, libXi.so
 Requires:       libXrandr.so.2$LIB64, libXcursor.so.1$LIB64, libfontconfig.so.1$LIB64
 Requires:       libz.so.1$LIB64, libstdc++.so.6$LIB64, libssl.so.3$LIB64
 Recommends:     libsecret-1.so.0$LIB64
+Suggests:       postgresql, mariadb, mongodb-database-tools, redis
 
 %description
 $LONG

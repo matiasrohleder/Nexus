@@ -140,6 +140,9 @@ public static class SelfTest
         var failed = QueryProfiler.Instance.Entries.Count(e => !e.Success);
         Check(failed >= 1, $"profiler recorded {failed} failed query");
 
+        // ---- 11. Backup → restore round-trip (skipped when pg_dump isn't installed) ----
+        _failures += await SelfTestMatrix.RunBackupRoundTripAsync(provider, conn, "nexus_selftest");
+
         Console.WriteLine(_failures == 0
             ? "\n✅ ALL CHECKS PASSED"
             : $"\n❌ {_failures} CHECK(S) FAILED");

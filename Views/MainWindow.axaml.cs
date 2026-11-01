@@ -67,6 +67,11 @@ public partial class MainWindow : Window
                 ResolveOverlay(false);
                 e.Handled = true;
             }
+            else if (e.Key == Key.Escape && _vm?.BackupDialog is { IsOpen: true, IsRunning: false })
+            {
+                _vm.BackupDialog.CloseCommand.Execute(null);
+                e.Handled = true;
+            }
             else if (e.Key == Key.Escape && _vm?.Updates.IsOpen == true)
             {
                 _vm.Updates.LaterCommand.Execute(null);

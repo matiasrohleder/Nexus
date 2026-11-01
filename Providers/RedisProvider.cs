@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using StackExchange.Redis;
 using Nexus.Models;
+using Nexus.Providers.Backup;
 using Nexus.Services;
 
 namespace Nexus.Providers;
@@ -36,6 +37,8 @@ public sealed class RedisProvider : IDatabaseProvider
         SupportsExplain = false,
         SupportsRowEditing = false
     };
+
+    public IBackupStrategy? Backup { get; } = new RedisBackup();
 
     private const int ScanSampleLimit = 500;
 

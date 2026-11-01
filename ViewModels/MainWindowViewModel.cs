@@ -7,6 +7,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Nexus.Models;
 using Nexus.Providers;
+using Nexus.Providers.Backup;
 using Nexus.Services;
 
 namespace Nexus.ViewModels;
@@ -31,6 +32,9 @@ public partial class MainWindowViewModel : ViewModelBase
     public ObservableCollection<DocumentViewModel> Documents { get; } = new();
     public ProfilerViewModel Profiler { get; } = new();
     public UpdateViewModel Updates { get; } = new();
+
+    /// <summary>The Backup / Restore overlay dialog (opened from the explorer context menu).</summary>
+    public BackupDialogViewModel BackupDialog { get; } = new();
 
     public ObservableCollection<Services.HistoryEntry> History => Services.QueryHistoryStore.Instance.History;
     public ObservableCollection<Services.Snippet> Snippets => Services.QueryHistoryStore.Instance.Snippets;
@@ -109,7 +113,8 @@ public partial class MainWindowViewModel : ViewModelBase
             Engine = provider.Id,
             BrandColor = provider.BrandColor,
             AccentColor = c.Color,
-            IsConnected = ConnectionStatus.IsConnected(c.Id)
+            IsConnected = ConnectionStatus.IsConnected(c.Id),
+            CanBackup = provider.Backup?.Scope == BackupScope.Connection
         };
         return node;
     }
@@ -145,7 +150,8 @@ public partial class MainWindowViewModel : ViewModelBase
                 pinned.Database = dbName;
                 node.AddChild(new TreeNodeViewModel(dbName, "database", NodeKind.Database, LoadSchemasAsync)
                 {
-                    Connection = pinned
+                    Connection = pinned,
+                    CanBackup = provider.Backup?.Scope == BackupScope.Database
                 });
             }
             return;
@@ -163,7 +169,8 @@ public partial class MainWindowViewModel : ViewModelBase
             node.AddChild(new TreeNodeViewModel(container, "folder", NodeKind.Schema, LoadObjectsAsync)
             {
                 Connection = node.Connection,
-                Schema = container
+                Schema = container,
+                CanBackup = provider.Backup?.Scope == BackupScope.Container
             });
         }
         if (containers.Count == 0)
@@ -970,6 +977,59 @@ public partial class MainWindowViewModel : ViewModelBase
         providerId is "postgresql" or "oracle" or "clickhouse";
 
     /// <summary>Reloads the dropped object's parent schema in place so the tree reflects the change.</summary>
+    // ---- backup / restore ---------------------------------------------------------------
+
+    [RelayCommand]
+    private void BackupNode(TreeNodeViewModel? node) => OpenBackupDialog(node ?? SelectedNode, BackupDirection.Backup);
+
+    [RelayCommand]
+    private void RestoreNode(TreeNodeViewModel? node) => OpenBackupDialog(node ?? SelectedNode, BackupDirection.Restore);
+
+    /// <summary>
+    /// Opens the dialog for the node's database: a database node (PG/MSSQL, pinned clone), a
+    /// container that is a database (MySQL/Mongo) or the whole connection (SQLite/DuckDB/Redis).
+    /// </summary>
+    private void OpenBackupDialog(TreeNodeViewModel? node, BackupDirection direction)
+    {
+        if (node is not { CanBackup: true, Connection: { } connection }) return;
+        var provider = ProviderRegistry.For(connection);
+        if (provider.Backup is not { } strategy) return;
+
+        var (target, label) = node.Kind switch
+        {
+            NodeKind.Database => (new BackupTarget(connection, node.Name), node.Name),
+            NodeKind.Schema => (new BackupTarget(connection, node.Schema!), node.Schema!),
+            _ => (new BackupTarget(ResolveSaved(connection) ?? connection, ""),
+                  provider.Capabilities.IsFileBased ? System.IO.Path.GetFileName(connection.FilePath) : connection.Name)
+        };
+
+        BackupDialog.Confirm = Confirm;
+        BackupDialog.Open(direction, strategy, target, label, provider.DisplayName,
+            onRestored: database => RefreshAfterRestoreAsync(node, database));
+    }
+
+    /// <summary>Shows restored objects: the node itself, or its connection when a new database appeared.</summary>
+    private async Task RefreshAfterRestoreAsync(TreeNodeViewModel node, string database)
+    {
+        Services.SchemaCache.Invalidate(node.Connection!.Id);
+        var sameNode = node.Kind switch
+        {
+            NodeKind.Database => node.Name == database,
+            NodeKind.Schema => node.Schema == database,
+            _ => false // whole-connection restores reload from the root
+        };
+        if (sameNode)
+        {
+            if (node.IsExpanded) await node.ReloadAsync();
+            else node.Invalidate();
+        }
+        else if (RootOf(node) is { } root)
+        {
+            if (root.IsExpanded) await root.ReloadAsync();
+            else root.Invalidate();
+        }
+    }
+
     private async Task RefreshAfterSchemaChangeAsync(TreeNodeViewModel node)
     {
         if (node.Parent is not null)

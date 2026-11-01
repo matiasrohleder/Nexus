@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using Nexus.Models;
+using Nexus.Providers.Backup;
 using Nexus.Services;
 
 namespace Nexus.Providers;
@@ -37,9 +38,10 @@ public sealed partial class MongoProvider : IDatabaseProvider
         SupportsUsers = true,
         SupportsKillSession = true,
         SupportsExplain = false,
-        SupportsRowEditing = false,
-        BackupTool = "mongodump"
+        SupportsRowEditing = false
     };
+
+    public IBackupStrategy? Backup { get; } = new MongoBackup();
 
     [GeneratedRegex(@"^db\.(?<coll>[\w.-]+)\.(?<op>find|aggregate|count|countDocuments|insertOne|insertMany|deleteMany|updateMany)\s*\((?<args>[\s\S]*)\)\s*;?\s*$")]
     private static partial Regex ShellSyntax();
