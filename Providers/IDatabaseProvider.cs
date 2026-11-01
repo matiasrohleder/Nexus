@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Nexus.Models;
+using Nexus.Providers.Backup;
 
 namespace Nexus.Providers;
 
@@ -23,9 +24,6 @@ public sealed record ProviderCapabilities
 
     /// <summary>File-based engine (SQLite, DuckDB): connection dialog shows a file picker instead of host/port/credentials.</summary>
     public bool IsFileBased { get; init; }
-
-    /// <summary>Executable to look for in PATH for backup/restore (e.g. "pg_dump"); null = no external tool.</summary>
-    public string? BackupTool { get; init; }
 }
 
 public enum DbObjectKind { Table, View, Collection }
@@ -137,4 +135,8 @@ public interface IDatabaseProvider
     Task<List<TableStats>> GetTableStatsAsync(SavedConnection c, string container, CancellationToken ct = default);
     Task<List<ServerVariable>> GetServerVariablesAsync(SavedConnection c, CancellationToken ct = default);
     Task<string> GetObjectDdlAsync(SavedConnection c, string container, string obj, CancellationToken ct = default);
+
+    // ---- backup / restore ----
+    /// <summary>The engine's backup/restore implementation; null = not offered (the explorer hides the actions).</summary>
+    IBackupStrategy? Backup => null;
 }

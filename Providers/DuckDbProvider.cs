@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using DuckDB.NET.Data;
 using Nexus.Models;
+using Nexus.Providers.Backup;
 
 namespace Nexus.Providers;
 
@@ -29,6 +30,10 @@ public sealed class DuckDbProvider : SqlProviderBase
         SupportsRowEditing = true,
         IsFileBased = true
     };
+
+    public override IBackupStrategy? Backup { get; }
+
+    public DuckDbProvider() => Backup = new DuckDbBackup(this);
 
     protected override DbConnection CreateConnection(SavedConnection c) =>
         new DuckDBConnection($"Data Source={c.FilePath}");

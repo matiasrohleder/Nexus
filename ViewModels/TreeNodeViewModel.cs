@@ -95,6 +95,8 @@ public partial class TreeNodeViewModel : ObservableObject
     public bool CanAdminServer => Kind is NodeKind.Connection or NodeKind.Database;
     public bool CanDrop => Kind is NodeKind.Database or NodeKind.Schema or NodeKind.Table or NodeKind.View;
     public bool HasContextMenu => Kind is not (NodeKind.Column or NodeKind.Message);
+    /// <summary>Backup/Restore are offered here: set at creation from the engine's backup scope.</summary>
+    public bool CanBackup { get; init; }
     public bool CanConnect => IsConnection && !IsConnected;
     public bool CanDisconnect => IsConnection && IsConnected;
 

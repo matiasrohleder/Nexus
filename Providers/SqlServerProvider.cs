@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Data.SqlClient;
 using Nexus.Models;
+using Nexus.Providers.Backup;
 using Nexus.Services;
 
 namespace Nexus.Providers;
@@ -29,6 +30,10 @@ public sealed class SqlServerProvider : SqlProviderBase
         SupportsExplain = false,
         SupportsRowEditing = true
     };
+
+    public override IBackupStrategy? Backup { get; }
+
+    public SqlServerProvider() => Backup = new SqlServerBackup(this);
 
     protected override DbConnection CreateConnection(SavedConnection c)
     {

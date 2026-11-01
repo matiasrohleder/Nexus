@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:Nexus.ViewModels"
         xmlns:c="using:Nexus.Controls"
+        xmlns:v="using:Nexus.Views"
         x:Class="Nexus.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Width="1280" Height="800" MinWidth="820" MinHeight="520"
@@ -198,6 +199,16 @@
                                           CommandParameter="{Binding SelectedNode}"
                                           IsVisible="{Binding SelectedNode.CanAdminServer}">
                                     <MenuItem.Icon><c:Icon Kind="server" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="Backup…" Command="{Binding BackupNodeCommand}"
+                                          CommandParameter="{Binding SelectedNode}"
+                                          IsVisible="{Binding SelectedNode.CanBackup}">
+                                    <MenuItem.Icon><c:Icon Kind="save" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="Restore…" Command="{Binding RestoreNodeCommand}"
+                                          CommandParameter="{Binding SelectedNode}"
+                                          IsVisible="{Binding SelectedNode.CanBackup}">
+                                    <MenuItem.Icon><c:Icon Kind="history" /></MenuItem.Icon>
                                 </MenuItem>
                                 <MenuItem Header="Rename Folder…" Command="{Binding RenameFolderCommand}"
                                           CommandParameter="{Binding SelectedNode}"
@@ -531,6 +542,9 @@
             </StackPanel>
         </Border>
     </Border>
+
+    <!-- Backup / Restore dialog; below the confirmation overlay, which it uses before restoring -->
+    <v:BackupDialogView DataContext="{Binding BackupDialog}" ZIndex="998" />
 
     <Border Name="ConfirmOverlay" Background="#B0101010" IsVisible="False" ZIndex="1000">
         <Border MinWidth="360" MaxWidth="520" Background="#252526" CornerRadius="10" Padding="22 20"

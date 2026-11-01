@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using MySqlConnector;
 using Nexus.Models;
+using Nexus.Providers.Backup;
 using Nexus.Services;
 
 namespace Nexus.Providers;
@@ -27,9 +28,12 @@ public class MySqlProvider : SqlProviderBase
         SupportsUsers = true,
         SupportsKillSession = true,
         SupportsExplain = true,
-        SupportsRowEditing = true,
-        BackupTool = "mysqldump"
+        SupportsRowEditing = true
     };
+
+    public override IBackupStrategy? Backup { get; }
+
+    public MySqlProvider() => Backup = new MySqlBackup(this, preferMariaDbTools: this is MariaDbProvider);
 
     protected override DbConnection CreateConnection(SavedConnection c)
     {

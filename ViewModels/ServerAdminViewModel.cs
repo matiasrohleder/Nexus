@@ -114,49 +114,6 @@ public partial class ServerAdminViewModel : DocumentViewModel
                 Variables.Add(v);
     }
 
-    // ---- backup -------------------------------------------------------------------------
-
-    public bool BackupAvailable => Services.BackupService.Describe(Connection).Available;
-    public string BackupHint => Services.BackupService.Describe(Connection).Hint;
-
-    [ObservableProperty] private string _backupDestination = "";
-    [ObservableProperty] private string _backupLog = "";
-    [ObservableProperty] private bool _backupRunning;
-
-    /// <summary>Wired by the view: asks for a destination path for the backup.</summary>
-    public Func<string, Task<string?>>? PickBackupPath { get; set; }
-
-    [RelayCommand]
-    private async Task BrowseBackupAsync()
-    {
-        if (PickBackupPath is null) return;
-        var suggested = $"{Connection.Name.Replace(' ', '_')}-{DateTime.Now:yyyyMMdd-HHmm}" +
-                        (Connection.Provider is "mongodb" or "duckdb" ? "" : ".sql");
-        var path = await PickBackupPath(suggested);
-        if (path is not null) BackupDestination = path;
-    }
-
-    [RelayCommand]
-    private async Task RunBackupAsync()
-    {
-        if (BackupRunning || string.IsNullOrWhiteSpace(BackupDestination)) return;
-        BackupRunning = true;
-        BackupLog = "";
-        try
-        {
-            var lines = new System.Collections.Generic.List<string>();
-            await Services.BackupService.BackupAsync(Connection, BackupDestination.Trim(), line =>
-            {
-                lines.Add(line);
-                Avalonia.Threading.Dispatcher.UIThread.Post(() => BackupLog = string.Join('\n', lines));
-            });
-        }
-        finally
-        {
-            BackupRunning = false;
-        }
-    }
-
     [RelayCommand]
     private async Task KillSessionAsync()
     {

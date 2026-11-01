@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Nexus.Models;
+using Nexus.Providers.Backup;
 using Nexus.Services;
 
 namespace Nexus.Providers;
@@ -25,6 +26,7 @@ public abstract class SqlProviderBase : IDatabaseProvider
     public abstract string DefaultDatabase { get; }
     public abstract ProviderCapabilities Capabilities { get; }
     public virtual string? ExplainPrefix => null;
+    public virtual IBackupStrategy? Backup => null;
 
     /// <summary>Hard cap per result set so a runaway SELECT cannot exhaust memory.</summary>
     public const int MaxRowsPerResult = 10_000;
@@ -33,7 +35,7 @@ public abstract class SqlProviderBase : IDatabaseProvider
     protected abstract DbConnection CreateConnection(SavedConnection c);
 
     /// <summary>Opens a connection for real work and records it, so Disconnect knows which pools to close.</summary>
-    protected async Task<DbConnection> OpenAsync(SavedConnection c, CancellationToken ct)
+    protected internal async Task<DbConnection> OpenAsync(SavedConnection c, CancellationToken ct)
     {
         var conn = CreateConnection(c);
         try

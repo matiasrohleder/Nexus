@@ -36,6 +36,12 @@ public sealed class AppSettings
     /// <summary>A release the user chose to skip: the startup check stays quiet about it.</summary>
     public string? SkippedUpdateVersion { get; set; }
 
+    /// <summary>
+    /// Command-line tools the user located by hand (tool name → executable), for backup/restore
+    /// clients that aren't in PATH or the usual install folders (see <c>ExternalTools</c>).
+    /// </summary>
+    public Dictionary<string, string> ToolPaths { get; set; } = new();
+
     private static string FilePath => Path.Combine(AppPaths.ConfigDir, "settings.json");
 
     public static AppSettings Load()

@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Npgsql;
 using Nexus.Models;
+using Nexus.Providers.Backup;
 using Nexus.Services;
 
 namespace Nexus.Providers;
@@ -28,9 +29,12 @@ public sealed class PostgresProvider : SqlProviderBase
         SupportsUsers = true,
         SupportsKillSession = true,
         SupportsExplain = true,
-        SupportsRowEditing = true,
-        BackupTool = "pg_dump"
+        SupportsRowEditing = true
     };
+
+    public override IBackupStrategy? Backup { get; }
+
+    public PostgresProvider() => Backup = new PostgresBackup(this);
 
     protected override DbConnection CreateConnection(SavedConnection c)
     {

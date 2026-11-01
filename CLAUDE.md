@@ -33,7 +33,9 @@ NEXUS_TEST_HOST=localhost NEXUS_TEST_PORT=55432 NEXUS_TEST_DB=demo \
 NEXUS_TEST_USER=postgres NEXUS_TEST_PW=nexus123 dotnet run -- --selftest
 
 # Generic per-engine matrix (SelfTestMatrix.cs): connect, CRUD, introspection, PK detection,
-# DDL, stats, sessions, transaction commit/rollback, explicit-column SELECT
+# DDL, stats, sessions, transaction commit/rollback, explicit-column SELECT, and a backup →
+# restore (new DB) → restore with replace round-trip per format (also in the PG suite).
+# Engines whose client tool isn't installed print [SKIP]; NEXUS_TEST_VERBOSE=1 shows tool output
 dotnet run -- --selftest mysql            # network engines use the NEXUS_TEST_* vars
 NEXUS_TEST_FILE=/tmp/t.db dotnet run -- --selftest sqlite    # file-based engines
 # ids: postgresql mysql mariadb sqlserver oracle sqlite duckdb clickhouse mongodb redis
@@ -79,7 +81,7 @@ driver. Key ideas that span multiple files:
 
 - **Capability flags drive the UI** (`ProviderCapabilities`): `SupportsSchemas` (containers are
   schemas vs databases), `SupportsServerActivity/Users/KillSession/Explain/RowEditing`,
-  `IsFileBased` (SQLite/DuckDB get a file picker instead of host/port), `BackupTool`. Views/VMs
+  `IsFileBased` (SQLite/DuckDB get a file picker instead of host/port). Views/VMs
   check flags — they never check provider ids except for narrow idioms (e.g. SQLite TRUNCATE,
   Mongo container pinning).
 - **`SqlProviderBase`** holds all shared ADO.NET logic: execution with real cancellation
@@ -100,7 +102,7 @@ driver. Key ideas that span multiple files:
 - **Documents are heterogeneous tabs** (`DocumentViewModel` base): `QueryDocumentViewModel` (SQL
   editor + results + DB picker), `TableEditorViewModel` (editable grid, PK-based UPDATE/INSERT/
   DELETE committed in one transaction; `"(null)"` cell text means SQL NULL), `ServerAdminViewModel`
-  (sessions/users/sizes/variables/backup). The `ViewLocator` maps `FooViewModel` → `Views.FooView`.
+  (sessions/users/sizes/variables). The `ViewLocator` maps `FooViewModel` → `Views.FooView`.
 - **Dialogs**: confirmations/notices use the **in-window overlay** in `MainWindow`
   (`ShowOverlayAsync` + `TaskCompletionSource`) — never OS-level modal windows from context-menu
   actions; they get lost behind the main window on Wayland (this was a real bug). VMs receive UI
@@ -110,6 +112,21 @@ driver. Key ideas that span multiple files:
   dropped) and calls `PrepareDropDatabaseAsync` first to clear the driver's connection pools —
   Nexus's own pooled connections from tree browsing otherwise block the drop. Offers force-drop /
   CASCADE on dependency errors; nothing may fail silently (always `Notify`).
+- **Backup / Restore** (`Providers/Backup/`): each engine exposes an `IBackupStrategy` as
+  `IDatabaseProvider.Backup` (null = not offered; Oracle/ClickHouse). Its `Scope` decides where the
+  explorer offers "Backup…/Restore…" (`TreeNodeViewModel.CanBackup`, set at node creation):
+  `Database` nodes (PG/MSSQL), `Container` nodes (MySQL/MariaDB/Mongo) or the `Connection` root
+  (SQLite/DuckDB/Redis). Native mechanisms where the engine has one (SQLite online backup API,
+  DuckDB EXPORT/IMPORT, SQL Server BACKUP/RESTORE — `ServerFile` paths live on the server); the
+  vendor's CLI otherwise, found by `Services/ExternalTools` (user-located `AppSettings.ToolPaths`,
+  PATH, then vendor install dirs — GUI launches don't inherit the shell PATH). **Never bundle or
+  download those tools** (that would be an extension). Secrets go via env (`PGPASSWORD`,
+  `REDISCLI_AUTH`) or an owner-only `SecretFile` (`--defaults-extra-file`, mongodump `--config`),
+  never argv — `RunAsync` echoes the command line into the log. Always go through `BackupRunner`:
+  it writes to `<path>.nexus-partial` and moves into place only on success. pg_dump must be ≥ the
+  server major (checked up front; the newest copy found is used). Restores create the target
+  database when missing; "replace" semantics are per engine (`ReplaceHint`). The dialog is
+  `BackupDialogViewModel`/`BackupDialogView`, an overlay below the confirm overlay (ZIndex 998).
 - **Persistence** (`AppPaths.ConfigDir`: `~/.config/Nexus`, `~/Library/Application Support/Nexus`,
   `%APPDATA%\Nexus`): `connections.json`, `settings.json` (UI prefs, e.g. sidebar side),
   `history.json` / `snippets.json`. Old files without newer fields migrate via serializer
@@ -211,7 +228,7 @@ and inject into the VM.
 ## Versioning
 
 Semantic versioning starting at **0.1.0** (0.2.0 = OS keyring + installers; 0.3.0 = connect/disconnect + explorer fixes; 0.4.0 = SQL
-completion/highlighting, responsive grids, self-update). The single source of truth is `<Version>` in
+completion/highlighting, responsive grids, self-update; 0.5.0 = backup/restore). The single source of truth is `<Version>` in
 `Nexus.csproj`; `Services/AppInfo.cs` reads it from the assembly at runtime and the top bar
 renders it as "Nexus — {version}" (`MainWindowViewModel.VersionText`); the packaging scripts
 read it from the csproj too. To release: bump `<Version>`, commit, push tag `v<Version>`.
@@ -240,17 +257,15 @@ Don't hardcode the version anywhere else.
 
 Pending work, roughly in priority order:
 
-1. **Restore** counterpart for backups (currently backup-only; pg_restore/mysql/mongorestore paths
-   and a Restore section in the Server panel).
-2. **User management actions** — create/drop user, change password (Server panel lists users
+1. **User management actions** — create/drop user, change password (Server panel lists users
    read-only today).
-3. **EXPLAIN for SQL Server and Oracle** (need `SHOWPLAN`/`PLAN_TABLE` flows, not a statement
+2. **EXPLAIN for SQL Server and Oracle** (need `SHOWPLAN`/`PLAN_TABLE` flows, not a statement
    prefix; `SupportsExplain=false` today).
-4. **Window state persistence** (size/position/splitter widths in `AppSettings`) and a
+3. **Window state persistence** (size/position/splitter widths in `AppSettings`) and a
    light-theme toggle.
-5. **Code signing**: buy/configure a Windows Authenticode cert and an Apple Developer ID so the
+4. **Code signing**: buy/configure a Windows Authenticode cert and an Apple Developer ID so the
    installers open without SmartScreen/Gatekeeper prompts (the scripts already accept them).
-6. **CSV import for ClickHouse** (fails today — no transactions; needs a batch INSERT path).
-7. **Result grid virtualization / paging beyond the 10k row cap** for very wide result sets.
-8. **CI for the engine matrix**: the installers workflow covers SQLite/DuckDB/secrets; add the
+5. **CSV import for ClickHouse** (fails today — no transactions; needs a batch INSERT path).
+6. **Result grid virtualization / paging beyond the 10k row cap** for very wide result sets.
+7. **CI for the engine matrix**: the installers workflow covers SQLite/DuckDB/secrets; add the
    Docker engines (`--selftest` loop), Oracle gated behind a flag because of its size.

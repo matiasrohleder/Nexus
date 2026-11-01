@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Nexus.Models;
 using Nexus.Providers;
+using Nexus.Providers.Backup;
 using Nexus.Services;
 
 namespace Nexus;
@@ -165,15 +166,7 @@ public static class SelfTestMatrix
         var err = await provider.ExecuteAsync(conn, "SELECT * FROM nexus_no_such_table_xyz");
         Check(err.Any(r => r.HasError), "invalid query surfaces error");
 
-        // ---- backup (engines with a no-external-tool path) ----
-        if (providerId == "duckdb")
-        {
-            var dest = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"nexus-backup-{Guid.NewGuid():N}");
-            var backupOk = await Services.BackupService.BackupAsync(conn, dest, _ => { });
-            Check(backupOk && System.IO.Directory.Exists(dest) && System.IO.Directory.GetFiles(dest).Length > 0,
-                  "EXPORT DATABASE backup produced files");
-            try { System.IO.Directory.Delete(dest, true); } catch { }
-        }
+        await CheckBackupRoundTripAsync(provider, conn, table);
 
         var drop = await provider.ExecuteAsync(conn, $"DROP TABLE {table}");
         Check(!drop.Any(r => r.HasError), "drop table");
@@ -236,6 +229,8 @@ public static class SelfTestMatrix
         var del = await provider.ExecuteAsync(conn, "db.nexus_selftest.deleteMany({})");
         Check(del[0].RecordsAffected == 3, "deleteMany cleanup");
 
+        await CheckBackupRoundTripAsync(provider, conn, "nexus_selftest");
+
         return Done();
     }
 
@@ -279,10 +274,235 @@ public static class SelfTestMatrix
         var bad = await provider.ExecuteAsync(conn, "NOTACOMMAND foo");
         Check(bad[0].HasError, "invalid command surfaces error");
 
+        await CheckBackupRoundTripAsync(provider, conn, "");
+
         var del = await provider.ExecuteAsync(conn, "DEL nexus:test:str nexus:test:hash");
         Check(del[0].Rows[0][0] == "2", "DEL cleanup");
 
         return Done();
+    }
+
+    // ---- backup / restore round-trip ---------------------------------------------------
+
+    /// <summary>The round-trip on its own (for the PostgreSQL suite); returns the number of failed checks.</summary>
+    internal static async Task<int> RunBackupRoundTripAsync(IDatabaseProvider provider, SavedConnection conn, string table)
+    {
+        var before = _failures;
+        await CheckBackupRoundTripAsync(provider, conn, table);
+        return _failures - before;
+    }
+
+    /// <summary>
+    /// Backs up a database holding 3 probe rows, restores it under a new name (or into a new file),
+    /// checks the rows, restores again with "replace" (still 3 rows, not 6) and cleans up. Engines
+    /// whose client tools aren't installed are skipped, not failed: the tools are the user's to install.
+    /// </summary>
+    private static async Task CheckBackupRoundTripAsync(IDatabaseProvider provider, SavedConnection conn, string table)
+    {
+        if (provider.Backup is not { } strategy)
+        {
+            Console.WriteLine("   [SKIP] backup/restore: not offered for this engine");
+            return;
+        }
+        var ready = strategy.Check(BackupDirection.Backup);
+        if (!ready.Ready)
+        {
+            Console.WriteLine($"   [SKIP] backup/restore: {ready.Detail}");
+            return;
+        }
+        var canRestore = strategy.Check(BackupDirection.Restore).Ready;
+
+        var work = System.IO.Directory.CreateDirectory(
+            System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"nexus-backup-test-{Guid.NewGuid():N}")).FullName;
+        var log = new TestLog();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var cleanup = new List<Func<Task>>();
+        try
+        {
+            // ---- source with 3 probe rows; restores go to a new database / file per format ----
+            BackupTarget source;
+            Func<BackupFormat, BackupTarget> restoreTargetFor;
+            Func<BackupTarget, Task<long>> count;
+            Action<string> dropLater = _ => { };
+            switch (strategy.Scope)
+            {
+                case BackupScope.Connection:
+                    source = new BackupTarget(conn, "");
+                    restoreTargetFor = f =>
+                    {
+                        var restoredFile = conn.Clone();
+                        restoredFile.Id = Guid.NewGuid();
+                        restoredFile.FilePath = System.IO.Path.Combine(work, $"restored-{f.Id}.db");
+                        return new BackupTarget(restoredFile, "");
+                    };
+                    count = t => CountRowsAsync(provider, t.Connection, table);
+                    break;
+
+                case BackupScope.Database:
+                {
+                    var admin = (SqlProviderBase)provider;
+                    source = new BackupTarget(WithDb(conn, $"_nexus_bk_src_{suffix}"), $"_nexus_bk_src_{suffix}");
+                    dropLater = name => cleanup.Add(async () =>
+                    {
+                        await admin.PrepareDropDatabaseAsync(conn);
+                        await provider.ExecuteAsync(conn, admin.BuildDropDatabaseSql(name, force: true)!);
+                    });
+                    dropLater(source.Database);
+                    await MustExecAsync(provider, conn, $"CREATE DATABASE {provider.QuoteIdent(source.Database)}");
+                    await MustExecAsync(provider, source.Connection, DefaultCreate.Replace("{T}", table));
+                    await MustExecAsync(provider, source.Connection, $"INSERT INTO {table} (id, name) VALUES (1, 'alpha'), (2, 'beta'), (3, 'gamma')");
+                    restoreTargetFor = f => new BackupTarget(conn, $"_nexus_bk_dst_{suffix}_{f.Id}");
+                    count = t => CountRowsAsync(provider, WithDb(conn, t.Database), table);
+                    break;
+                }
+
+                default: // Container: MySQL/MariaDB databases, Mongo databases
+                {
+                    source = new BackupTarget(conn, $"_nexus_bk_src_{suffix}");
+                    var drop = provider.BuildDropContainerSql("{DB}", cascade: false)!;
+                    var isMongo = provider.QueryLanguage == "mongo";
+                    dropLater = name => cleanup.Add(() => provider.ExecuteAsync(isMongo ? WithDb(conn, name) : conn,
+                        drop.Replace(provider.QuoteIdent("{DB}"), provider.QuoteIdent(name))));
+                    dropLater(source.Database);
+                    if (isMongo)
+                    {
+                        await MustExecAsync(provider, WithDb(conn, source.Database),
+                            $"db.{table}.insertMany([{{\"n\":1}},{{\"n\":2}},{{\"n\":3}}])");
+                        count = async t =>
+                        {
+                            var r = await provider.ExecuteAsync(WithDb(conn, t.Database), $"db.{table}.count()");
+                            return r[0].HasError || r[0].Rows.Count == 0 ? -1 : long.Parse(r[0].Rows[0][0]!);
+                        };
+                    }
+                    else
+                    {
+                        var qualified = $"{provider.QuoteIdent(source.Database)}.{table}";
+                        await MustExecAsync(provider, conn, $"CREATE DATABASE {provider.QuoteIdent(source.Database)}");
+                        await MustExecAsync(provider, conn, DefaultCreate.Replace("{T}", qualified));
+                        await MustExecAsync(provider, conn, $"INSERT INTO {qualified} (id, name) VALUES (1, 'alpha'), (2, 'beta'), (3, 'gamma')");
+                        count = t => CountRowsAsync(provider, conn, $"{provider.QuoteIdent(t.Database)}.{table}");
+                    }
+                    restoreTargetFor = f => new BackupTarget(conn, $"_nexus_bk_dst_{suffix}_{f.Id}");
+                    break;
+                }
+            }
+
+            var expected = await count(source);
+
+            foreach (var format in strategy.Formats)
+            {
+                // ---- backup ----
+                var path = strategy.Location == BackupLocation.ServerFile
+                    ? await strategy.SuggestServerPathAsync(source, "_nexus_selftest.bak", default)
+                    : System.IO.Path.Combine(work, $"backup-{format.Id}{format.Extension}");
+                Check(path is not null, $"[{format.Id}] backup path resolved ({path})");
+                if (path is null) return;
+
+                await log.RunAsync($"[{format.Id}] backup", () => BackupRunner.BackupAsync(strategy, source, path, format, log, default));
+                if (strategy.Location != BackupLocation.ServerFile)
+                    Check((System.IO.File.Exists(path) && new System.IO.FileInfo(path).Length > 0) ||
+                          (System.IO.Directory.Exists(path) && System.IO.Directory.EnumerateFiles(path).Any()),
+                          $"[{format.Id}] backup written ({format.Label})");
+                Check(!System.IO.File.Exists(path + ".nexus-partial") && !System.IO.Directory.Exists(path + ".nexus-partial"),
+                      $"[{format.Id}] no partial output left behind");
+
+                if (!canRestore)
+                {
+                    var refused = await log.ThrowsAsync(() => BackupRunner.RestoreAsync(strategy, source, path, false, log, default));
+                    Check(refused, $"restore refused with an explanation ({strategy.Check(BackupDirection.Restore).Detail[..40]}…)");
+                    continue;
+                }
+
+                // ---- restore into a new database / file, then again with replace ----
+                var restoreTarget = restoreTargetFor(format);
+                if (restoreTarget.Database.Length > 0) dropLater(restoreTarget.Database);
+
+                await log.RunAsync($"[{format.Id}] restore", () => BackupRunner.RestoreAsync(strategy, restoreTarget, path, false, log, default));
+                var restored = await count(restoreTarget);
+                Check(restored == expected && expected > 0, $"[{format.Id}] restored rows match ({restored}/{expected})");
+
+                await log.RunAsync($"[{format.Id}] restore (replace)", () => BackupRunner.RestoreAsync(strategy, restoreTarget, path, true, log, default));
+                restored = await count(restoreTarget);
+                Check(restored == expected, $"[{format.Id}] restore with replace overwrites, doesn't duplicate ({restored}/{expected})");
+
+                if (provider.Id is "sqlite" or "sqlserver")
+                    Check(await log.ThrowsAsync(() => BackupRunner.RestoreAsync(strategy, restoreTarget, path, false, log, default)),
+                          $"[{format.Id}] restore over existing data without replace is refused");
+            }
+        }
+        catch (Exception ex)
+        {
+            Check(false, $"backup/restore round-trip threw: {ex.Message}");
+            log.DumpTail();
+        }
+        finally
+        {
+            foreach (var step in cleanup)
+                try { await step(); } catch { /* best effort */ }
+            await provider.DisconnectAsync(conn);
+            try { System.IO.Directory.Delete(work, recursive: true); } catch { }
+        }
+    }
+
+    private static SavedConnection WithDb(SavedConnection c, string database)
+    {
+        var clone = c.Clone();
+        clone.Database = database;
+        return clone;
+    }
+
+    private static async Task MustExecAsync(IDatabaseProvider provider, SavedConnection c, string sql)
+    {
+        var r = await provider.ExecuteAsync(c, sql);
+        if (r.FirstOrDefault(x => x.HasError)?.Error is { } error)
+            throw new InvalidOperationException($"{sql}: {error}");
+    }
+
+    private static async Task<long> CountRowsAsync(IDatabaseProvider provider, SavedConnection c, string table)
+    {
+        var r = await provider.ExecuteAsync(c, $"SELECT COUNT(*) FROM {table}");
+        return r[0].HasError || r[0].Rows.Count == 0 ? -1 : long.Parse(r[0].Rows[0][0]!);
+    }
+
+    /// <summary>Collects tool output; prints it only when a step fails (NEXUS_TEST_VERBOSE=1 prints everything).</summary>
+    private sealed class TestLog : IProgress<string>
+    {
+        private readonly List<string> _lines = new();
+        private readonly bool _verbose = Environment.GetEnvironmentVariable("NEXUS_TEST_VERBOSE") == "1";
+
+        public void Report(string value)
+        {
+            lock (_lines) _lines.Add(value);
+            if (_verbose) Console.WriteLine($"         | {value}");
+        }
+
+        public async Task RunAsync(string step, Func<Task> action)
+        {
+            try
+            {
+                await action();
+                Check(true, step);
+            }
+            catch (Exception ex)
+            {
+                Check(false, $"{step}: {ex.Message}");
+                DumpTail();
+                throw;
+            }
+        }
+
+        public async Task<bool> ThrowsAsync(Func<Task> action)
+        {
+            try { await action(); return false; }
+            catch (BackupException) { return true; }
+        }
+
+        public void DumpTail()
+        {
+            lock (_lines)
+                foreach (var line in _lines.TakeLast(20))
+                    Console.WriteLine($"         | {line}");
+        }
     }
 
     private static SavedConnection BuildConnection(IDatabaseProvider provider)

@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Data.Sqlite;
 using Nexus.Models;
+using Nexus.Providers.Backup;
 
 namespace Nexus.Providers;
 
@@ -27,9 +28,10 @@ public sealed class SqliteProvider : SqlProviderBase
         SupportsKillSession = false,
         SupportsExplain = true,
         SupportsRowEditing = true,
-        IsFileBased = true,
-        BackupTool = "sqlite3"
+        IsFileBased = true
     };
+
+    public override IBackupStrategy? Backup { get; } = new SqliteBackup();
 
     protected override DbConnection CreateConnection(SavedConnection c) =>
         new SqliteConnection(new SqliteConnectionStringBuilder
