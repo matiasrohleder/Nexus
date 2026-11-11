@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Data.Sqlite;
+using Nexus.Models;
 
 namespace Nexus.Providers.Backup;
 
@@ -21,8 +22,8 @@ internal sealed class SqliteBackup : IBackupStrategy
 
     public string ReplaceHint => "Replaces the whole database with the backup.";
 
-    public BackupReadiness Check(BackupDirection direction) =>
-        BackupReadiness.Ok("Built in: uses SQLite's online backup API — no external tool needed.");
+    public Task<BackupReadiness> CheckAsync(BackupDirection direction, SavedConnection connection,
+        CancellationToken ct = default) => Task.FromResult(BackupReadiness.Ok("Built in: uses SQLite's online backup API — no external tool needed."));
 
     public Task BackupAsync(BackupTarget target, string path, BackupFormat format,
         IProgress<string> log, CancellationToken ct) => Task.Run(() =>

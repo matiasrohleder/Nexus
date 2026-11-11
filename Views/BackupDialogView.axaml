@@ -30,7 +30,7 @@
                         <Grid ColumnDefinitions="Auto,*,Auto">
                             <Panel Margin="0 1 8 0" VerticalAlignment="Top">
                                 <c:Icon Kind="check" Size="14" Foreground="#4ADE80" IsVisible="{Binding IsReady}" />
-                                <c:Icon Kind="warning" Size="14" Foreground="#FBBF24" IsVisible="{Binding !IsReady}" />
+                                <c:Icon Kind="warning" Size="14" Foreground="#FBBF24" IsVisible="{Binding ShowToolWarning}" />
                             </Panel>
                             <SelectableTextBlock Grid.Column="1" Text="{Binding Readiness.Detail}" TextWrapping="Wrap"
                                                  FontSize="12" LineHeight="18" Opacity="0.85" />

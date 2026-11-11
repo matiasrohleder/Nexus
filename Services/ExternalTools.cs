@@ -11,11 +11,19 @@ using System.Threading.Tasks;
 
 namespace Nexus.Services;
 
-/// <summary>A located command-line tool and what its <c>--version</c> printed.</summary>
-public sealed record ToolInfo(string Path, string VersionText, Version? Version)
+/// <summary>
+/// A located command-line tool and what its <c>--version</c> printed. With <see cref="Container"/>
+/// set it isn't installed here: it is the copy inside the container that runs the database, and
+/// <see cref="Path"/> is just its name there (see <see cref="ContainerTools"/>).
+/// </summary>
+public sealed record ToolInfo(string Path, string VersionText, Version? Version, ContainerRef? Container = null)
 {
-    public override string ToString() =>
-        Version is null ? Path : $"{System.IO.Path.GetFileNameWithoutExtension(Path)} {Version} ({Path})";
+    public string Name => System.IO.Path.GetFileNameWithoutExtension(Path);
+    public bool InContainer => Container is not null;
+
+    public override string ToString() => Container is { } k
+        ? $"{Name}{(Version is null ? "" : $" {Version}")} inside the {k.Runtime} container \"{k.Name}\""
+        : Version is null ? Path : $"{Name} {Version} ({Path})";
 }
 
 /// <summary>
@@ -173,9 +181,32 @@ public static partial class ExternalTools
         string text;
         lock (output) text = output.ToString().Trim();
         // "mysqldump  Ver 8.4.1 for Linux" / "mysqldump from 11.4.2-MariaDB": take the product version, not "Ver 10.19".
-        var info = new ToolInfo(path, text, ParseVersion(ProductVersionText(text)));
+        var info = new ToolInfo(path, text, ParseToolVersion(text));
         Versions[path] = (stamp, info);
         return info;
+    }
+
+    /// <summary>The product version in a tool's <c>--version</c> output.</summary>
+    public static Version? ParseToolVersion(string text) => ParseVersion(ProductVersionText(text));
+
+    /// <summary>
+    /// Runs a probe (e.g. <c>docker ps</c>) and returns its exit code and combined output; a
+    /// tool that can't be started or doesn't answer within <paramref name="timeout"/> gives -1.
+    /// </summary>
+    public static async Task<(int Exit, string Output)> CaptureAsync(string path, IReadOnlyList<string> args,
+        TimeSpan timeout, CancellationToken ct = default)
+    {
+        var output = new StringBuilder();
+        using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        limit.CancelAfter(timeout);
+        try
+        {
+            var exit = await RunAsync(path, args, IgnoreLog.Instance, limit.Token,
+                onLine: line => { lock (output) output.AppendLine(line); }, echo: false);
+            lock (output) return (exit, output.ToString().Trim());
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested) { return (-1, ""); }
+        catch (Exception ex) when (ex is not OperationCanceledException) { return (-1, ""); }
     }
 
     private static string ProductVersionText(string text)
@@ -192,11 +223,12 @@ public static partial class ExternalTools
     /// Runs a tool to completion, streaming every stdout/stderr line to <paramref name="log"/>.
     /// <paramref name="stdinFile"/> is piped to the tool's input (e.g. a SQL script for the mysql
     /// client); otherwise stdin is closed at once, so a tool that would prompt for a password fails
-    /// instead of hanging. Cancelling kills the whole process tree. Returns the exit code.
+    /// instead of hanging. <paramref name="stdoutFile"/> receives the tool's standard output as
+    /// raw bytes (then only stderr is logged). Cancelling kills the whole process tree. Returns the exit code.
     /// </summary>
     public static async Task<int> RunAsync(string path, IReadOnlyList<string> args, IProgress<string> log,
         CancellationToken ct, IReadOnlyDictionary<string, string>? env = null, string? stdinFile = null,
-        Action<string>? onLine = null, bool echo = true)
+        Action<string>? onLine = null, bool echo = true, string? stdoutFile = null)
     {
         var psi = new ProcessStartInfo
         {
@@ -215,8 +247,7 @@ public static partial class ExternalTools
                 psi.Environment[key] = value;
 
         if (echo)
-            log.Report("$ " + System.IO.Path.GetFileName(path) + " " +
-                       string.Join(' ', args.Select(a => a.Contains(' ') ? $"\"{a}\"" : a)));
+            log.Report("$ " + System.IO.Path.GetFileName(path) + " " + FormatArgs(args, stdinFile, stdoutFile));
 
         using var process = new Process { StartInfo = psi };
         DataReceivedEventHandler forward = (_, e) =>
@@ -230,7 +261,9 @@ public static partial class ExternalTools
 
         ct.ThrowIfCancellationRequested();
         process.Start();
-        process.BeginOutputReadLine();
+        Task? copyOut = null;
+        if (stdoutFile is null) process.BeginOutputReadLine();
+        else copyOut = CopyToFileAsync(process.StandardOutput.BaseStream, stdoutFile);
         process.BeginErrorReadLine();
 
         using var kill = ct.Register(() =>
@@ -255,8 +288,27 @@ public static partial class ExternalTools
 
         // Also waits until the redirected output has been fully read.
         await process.WaitForExitAsync(CancellationToken.None);
+        if (copyOut is not null) await copyOut;
         ct.ThrowIfCancellationRequested();
         return process.ExitCode;
+    }
+
+    /// <summary>The arguments as echoed in the log, with the redirections a shell would show.</summary>
+    public static string FormatArgs(IReadOnlyList<string> args, string? stdinFile = null, string? stdoutFile = null)
+    {
+        static string Quote(string a) => a.Contains(' ') ? $"\"{a}\"" : a;
+        var text = string.Join(' ', args.Select(Quote));
+        if (stdinFile is not null) text += " < " + Quote(stdinFile);
+        if (stdoutFile is not null) text += " > " + Quote(stdoutFile);
+        return text;
+    }
+
+    private static async Task CopyToFileAsync(Stream source, string path)
+    {
+        await using var file = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None,
+            bufferSize: 1 << 16, useAsync: true);
+        // No token: killing the process on cancel ends the stream.
+        await source.CopyToAsync(file);
     }
 }
 

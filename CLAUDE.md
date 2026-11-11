@@ -120,7 +120,13 @@ driver. Key ideas that span multiple files:
   DuckDB EXPORT/IMPORT, SQL Server BACKUP/RESTORE — `ServerFile` paths live on the server); the
   vendor's CLI otherwise, found by `Services/ExternalTools` (user-located `AppSettings.ToolPaths`,
   PATH, then vendor install dirs — GUI launches don't inherit the shell PATH). **Never bundle or
-  download those tools** (that would be an extension). Secrets go via env (`PGPASSWORD`,
+  download those tools** (that would be an extension). If none is installed (or the container's
+  has a newer major), `Services/ContainerTools` runs the copy **inside the Docker/Podman container
+  that publishes the connection's port** (local hosts only; `docker exec`, tool connects to
+  127.0.0.1:<container port>). The container can't see host paths, so strategies stream files via
+  stdin/stdout when `ToolInfo.InContainer` (`RunCheckedAsync` `stdinFile`/`stdoutFile`), env
+  secrets are forwarded with `-e NAME`, and secret files go through `BackupTools.SecretFileAsync`
+  (created inside the container, removed after). Readiness is `IBackupStrategy.CheckAsync`. Secrets go via env (`PGPASSWORD`,
   `REDISCLI_AUTH`) or an owner-only `SecretFile` (`--defaults-extra-file`, mongodump `--config`),
   never argv — `RunAsync` echoes the command line into the log. Always go through `BackupRunner`:
   it writes to `<path>.nexus-partial` and moves into place only on success. pg_dump must be ≥ the

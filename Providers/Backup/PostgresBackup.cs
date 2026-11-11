@@ -34,22 +34,25 @@ internal sealed class PostgresBackup(PostgresProvider provider) : IBackupStrateg
         "Drops the objects in the backup before recreating them (pg_restore --clean). The restore runs " +
         "in one transaction: if anything fails, the database is left as it was.";
 
-    public BackupReadiness Check(BackupDirection direction) => direction == BackupDirection.Backup
-        ? BackupTools.Check(["pg_dump"], InstallHint)
-        : BackupTools.Check(["pg_restore"], InstallHint);
+    public Task<BackupReadiness> CheckAsync(BackupDirection direction, SavedConnection connection,
+        CancellationToken ct = default) =>
+        BackupTools.CheckAsync([direction == BackupDirection.Backup ? "pg_dump" : "pg_restore"], InstallHint, connection, ct);
 
     public async Task BackupAsync(BackupTarget target, string path, BackupFormat format,
         IProgress<string> log, CancellationToken ct)
     {
-        var tool = await BackupTools.ResolveAsync(["pg_dump"], InstallHint, log, ct);
+        var tool = await BackupTools.ResolveAsync(["pg_dump"], InstallHint, target.Connection, log, ct);
         await EnsureClientNotOlderAsync(tool, target.Connection, ct);
 
-        var args = ConnectionArgs(target.Connection, target.Database);
-        args.AddRange(["--verbose", $"--format={format.Id}", $"--file={path}"]);
+        var args = ConnectionArgs(tool, target.Connection, target.Database);
+        args.AddRange(["--verbose", $"--format={format.Id}"]);
+        // In a container the file can't be named (it can't see ours): the archive streams over stdout.
+        if (!tool.InContainer) args.Add($"--file={path}");
         // Plain scripts are self-cleaning, so restoring one over an existing database works too.
         if (format == Plain) args.AddRange(["--clean", "--if-exists"]);
 
-        await BackupTools.RunCheckedAsync(tool, args, log, ct, Environment(target.Connection));
+        await BackupTools.RunCheckedAsync(tool, args, log, ct, Environment(target.Connection),
+            stdoutFile: tool.InContainer ? path : null);
     }
 
     public async Task RestoreAsync(BackupTarget target, string path, bool replace,
@@ -60,19 +63,20 @@ internal sealed class PostgresBackup(PostgresProvider provider) : IBackupStrateg
 
         await EnsureDatabaseExistsAsync(target, log, ct);
 
-        var args = ConnectionArgs(target.Connection, target.Database);
         if (isArchive)
         {
-            var tool = await BackupTools.ResolveAsync(["pg_restore"], InstallHint, log, ct);
+            var tool = await BackupTools.ResolveAsync(["pg_restore"], InstallHint, target.Connection, log, ct);
+            var args = ConnectionArgs(tool, target.Connection, target.Database);
             args.AddRange(["--verbose", "--single-transaction", "--exit-on-error"]);
             if (replace) args.AddRange(["--clean", "--if-exists"]);
-            args.Add(path);
+            // No file argument = pg_restore reads the archive from stdin (how it reaches a container).
+            if (!tool.InContainer) args.Add(path);
 
             string? missingRole = null;
             try
             {
                 await BackupTools.RunCheckedAsync(tool, args, log, ct, Environment(target.Connection),
-                    onLine: line => missingRole ??= MissingRole(line));
+                    stdinFile: tool.InContainer ? path : null, onLine: line => missingRole ??= MissingRole(line));
             }
             catch (BackupException) when (missingRole is not null)
             {
@@ -83,11 +87,15 @@ internal sealed class PostgresBackup(PostgresProvider provider) : IBackupStrateg
         }
         else
         {
-            var tool = await BackupTools.ResolveAsync(["psql"], InstallHint, log, ct);
+            var tool = await BackupTools.ResolveAsync(["psql"], InstallHint, target.Connection, log, ct);
             if (replace)
                 log.Report("Note: a plain SQL script decides itself what it drops (Nexus writes them with --clean).");
-            args.AddRange(["--no-psqlrc", "--set=ON_ERROR_STOP=1", "--single-transaction", $"--file={path}"]);
-            await BackupTools.RunCheckedAsync(tool, args, log, ct, Environment(target.Connection));
+            var args = ConnectionArgs(tool, target.Connection, target.Database);
+            // "--file=-" = stdin; still a -f, which --single-transaction requires.
+            args.AddRange(["--no-psqlrc", "--set=ON_ERROR_STOP=1", "--single-transaction",
+                tool.InContainer ? "--file=-" : $"--file={path}"]);
+            await BackupTools.RunCheckedAsync(tool, args, log, ct, Environment(target.Connection),
+                stdinFile: tool.InContainer ? path : null);
         }
     }
 
@@ -137,12 +145,16 @@ internal sealed class PostgresBackup(PostgresProvider provider) : IBackupStrateg
             : BackupTools.WithDatabase(c, provider.DefaultDatabase);
     }
 
-    private static List<string> ConnectionArgs(SavedConnection c, string database) =>
-    [
-        $"--host={c.Host}", $"--port={c.Port}", $"--username={c.Username}", "--no-password",
-        // As a conninfo string: a database name containing '=' would otherwise be parsed as one.
-        $"--dbname=dbname='{database.Replace("\\", "\\\\").Replace("'", "\\'")}'"
-    ];
+    private static List<string> ConnectionArgs(ToolInfo tool, SavedConnection c, string database)
+    {
+        var (host, port) = BackupTools.Endpoint(tool, c);
+        return
+        [
+            $"--host={host}", $"--port={port}", $"--username={c.Username}", "--no-password",
+            // As a conninfo string: a database name containing '=' would otherwise be parsed as one.
+            $"--dbname=dbname='{database.Replace("\\", "\\\\").Replace("'", "\\'")}'"
+        ];
+    }
 
     /// <summary>libpq reads the password and TLS mode from the environment (never argv).</summary>
     private static Dictionary<string, string> Environment(SavedConnection c)

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using Nexus.Models;
 using Nexus.Services;
 
 namespace Nexus.Providers.Backup;
@@ -21,8 +22,8 @@ internal sealed class DuckDbBackup(DuckDbProvider provider) : IBackupStrategy
     public string ReplaceHint =>
         "Moves the current database file aside (kept as a .pre-restore copy) and imports into a fresh one.";
 
-    public BackupReadiness Check(BackupDirection direction) =>
-        BackupReadiness.Ok("Built in: uses DuckDB's EXPORT/IMPORT DATABASE — no external tool needed.");
+    public Task<BackupReadiness> CheckAsync(BackupDirection direction, SavedConnection connection,
+        CancellationToken ct = default) => Task.FromResult(BackupReadiness.Ok("Built in: uses DuckDB's EXPORT/IMPORT DATABASE — no external tool needed."));
 
     public async Task BackupAsync(BackupTarget target, string path, BackupFormat format,
         IProgress<string> log, CancellationToken ct)

@@ -44,7 +44,7 @@ public partial class BackupDialogViewModel : ViewModelBase
     [ObservableProperty] [NotifyCanExecuteChangedFor(nameof(StartCommand))] private string _targetDatabase = "";
     [ObservableProperty] private bool _replace;
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsReady), nameof(CanLocateTool), nameof(LocateToolText))]
+    [NotifyPropertyChangedFor(nameof(IsReady), nameof(ShowToolWarning), nameof(CanLocateTool), nameof(LocateToolText))]
     [NotifyCanExecuteChangedFor(nameof(StartCommand))]
     private BackupReadiness _readiness = BackupReadiness.Ok("");
     [ObservableProperty]
@@ -59,6 +59,7 @@ public partial class BackupDialogViewModel : ViewModelBase
     public bool IsBackup => Direction == BackupDirection.Backup;
     public bool IsRestore => Direction == BackupDirection.Restore;
     public bool IsReady => Readiness.Ready;
+    public bool ShowToolWarning => !Readiness.Ready && !ReferenceEquals(Readiness, BackupReadiness.Checking);
     public bool CanEdit => !IsRunning;
     public bool CanLocateTool => Readiness.Tool is not null && !IsRunning;
     public string LocateToolText => Readiness.Ready ? "Change…" : "Locate…";
@@ -135,9 +136,24 @@ public partial class BackupDialogViewModel : ViewModelBase
             _ = SuggestPathAsync();
     }
 
-    private void RefreshReadiness()
+    private int _readinessCheck;
+
+    /// <summary>Looks for the tools off the UI thread (it may ask docker/podman); the latest check wins.</summary>
+    private async void RefreshReadiness()
     {
-        Readiness = _strategy?.Check(Direction) ?? BackupReadiness.Unsupported("");
+        var check = ++_readinessCheck;
+        Readiness = BackupReadiness.Checking;
+        OnPropertyChanged(nameof(ShowReplace));
+        BackupReadiness result;
+        try
+        {
+            result = _strategy is { } strategy && _target is { } target
+                ? await Task.Run(() => strategy.CheckAsync(Direction, target.Connection))
+                : BackupReadiness.Unsupported("");
+        }
+        catch (Exception ex) { result = BackupReadiness.Unsupported($"Could not look for the tools: {ex.Message}"); }
+        if (check != _readinessCheck) return;
+        Readiness = result;
         OnPropertyChanged(nameof(ShowReplace));
     }
 

@@ -304,13 +304,13 @@ public static class SelfTestMatrix
             Console.WriteLine("   [SKIP] backup/restore: not offered for this engine");
             return;
         }
-        var ready = strategy.Check(BackupDirection.Backup);
+        var ready = await strategy.CheckAsync(BackupDirection.Backup, conn);
         if (!ready.Ready)
         {
             Console.WriteLine($"   [SKIP] backup/restore: {ready.Detail}");
             return;
         }
-        var canRestore = strategy.Check(BackupDirection.Restore).Ready;
+        var canRestore = (await strategy.CheckAsync(BackupDirection.Restore, conn)).Ready;
 
         var work = System.IO.Directory.CreateDirectory(
             System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"nexus-backup-test-{Guid.NewGuid():N}")).FullName;
@@ -409,7 +409,7 @@ public static class SelfTestMatrix
                 if (!canRestore)
                 {
                     var refused = await log.ThrowsAsync(() => BackupRunner.RestoreAsync(strategy, source, path, false, log, default));
-                    Check(refused, $"restore refused with an explanation ({strategy.Check(BackupDirection.Restore).Detail[..40]}…)");
+                    Check(refused, $"restore refused with an explanation ({(await strategy.CheckAsync(BackupDirection.Restore, conn)).Detail[..40]}…)");
                     continue;
                 }
 
