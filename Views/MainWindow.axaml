@@ -162,12 +162,12 @@
                                           IsVisible="{Binding SelectedNode.CanDisconnect}">
                                     <MenuItem.Icon><c:Icon Kind="unlink" /></MenuItem.Icon>
                                 </MenuItem>
-                                <MenuItem Header="Select Top 1000 Rows" Command="{Binding OpenTableCommand}"
+                                <MenuItem Header="Select Top 200 Rows" Command="{Binding OpenTableTop200Command}"
                                           CommandParameter="{Binding SelectedNode}"
                                           IsVisible="{Binding SelectedNode.IsQueryable}">
                                     <MenuItem.Icon><c:Icon Kind="search" /></MenuItem.Icon>
                                 </MenuItem>
-                                <MenuItem Header="Select Top 200 Rows" Command="{Binding OpenTableTop200Command}"
+                                <MenuItem Header="Select Top 1000 Rows" Command="{Binding OpenTableCommand}"
                                           CommandParameter="{Binding SelectedNode}"
                                           IsVisible="{Binding SelectedNode.IsQueryable}">
                                     <MenuItem.Icon><c:Icon Kind="search" /></MenuItem.Icon>
