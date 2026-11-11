@@ -51,8 +51,7 @@ internal sealed class PostgresBackup(PostgresProvider provider) : IBackupStrateg
         // Plain scripts are self-cleaning, so restoring one over an existing database works too.
         if (format == Plain) args.AddRange(["--clean", "--if-exists"]);
 
-        await BackupTools.RunCheckedAsync(tool, args, log, ct, Environment(target.Connection),
-            stdoutFile: tool.InContainer ? path : null);
+        await RunToolAsync(tool, args, target.Connection, log, ct, stdoutFile: tool.InContainer ? path : null);
     }
 
     public async Task RestoreAsync(BackupTarget target, string path, bool replace,
@@ -75,7 +74,7 @@ internal sealed class PostgresBackup(PostgresProvider provider) : IBackupStrateg
             string? missingRole = null;
             try
             {
-                await BackupTools.RunCheckedAsync(tool, args, log, ct, Environment(target.Connection),
+                await RunToolAsync(tool, args, target.Connection, log, ct,
                     stdinFile: tool.InContainer ? path : null, onLine: line => missingRole ??= MissingRole(line));
             }
             catch (BackupException) when (missingRole is not null)
@@ -94,8 +93,35 @@ internal sealed class PostgresBackup(PostgresProvider provider) : IBackupStrateg
             // "--file=-" = stdin; still a -f, which --single-transaction requires.
             args.AddRange(["--no-psqlrc", "--set=ON_ERROR_STOP=1", "--single-transaction",
                 tool.InContainer ? "--file=-" : $"--file={path}"]);
-            await BackupTools.RunCheckedAsync(tool, args, log, ct, Environment(target.Connection),
-                stdinFile: tool.InContainer ? path : null);
+            await RunToolAsync(tool, args, target.Connection, log, ct, stdinFile: tool.InContainer ? path : null);
+        }
+    }
+
+    /// <summary>
+    /// Runs a client tool under a unique application_name. On cancel the tool is killed, but a
+    /// backend blocked on a lock doesn't notice its client died (psql, unlike pg_dump/pg_restore,
+    /// doesn't cancel its query on SIGTERM) and would linger in its transaction until the lock
+    /// frees up — so its sessions are also terminated from the server side.
+    /// </summary>
+    private async Task RunToolAsync(ToolInfo tool, List<string> args, SavedConnection c, IProgress<string> log,
+        CancellationToken ct, string? stdinFile = null, string? stdoutFile = null, Action<string>? onLine = null)
+    {
+        var appName = $"{AppName} {Guid.NewGuid().ToString("N")[..12]}";
+        try
+        {
+            await BackupTools.RunCheckedAsync(tool, args, log, ct, Environment(c, appName), stdinFile, onLine, stdoutFile);
+        }
+        catch (OperationCanceledException)
+        {
+            try
+            {
+                await provider.ExecuteAsync(c,
+                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity " +
+                    $"WHERE application_name = {provider.QuoteLiteral(appName)} AND pid <> pg_backend_pid()",
+                    CancellationToken.None);
+            }
+            catch { /* best effort: the server rolls the transaction back once it notices */ }
+            throw;
         }
     }
 
@@ -145,6 +171,9 @@ internal sealed class PostgresBackup(PostgresProvider provider) : IBackupStrateg
             : BackupTools.WithDatabase(c, provider.DefaultDatabase);
     }
 
+    /// <summary>Prefix of the tools' application_name (tells them apart from Nexus's own sessions in pg_stat_activity).</summary>
+    internal const string AppName = "Nexus backup";
+
     private static List<string> ConnectionArgs(ToolInfo tool, SavedConnection c, string database)
     {
         var (host, port) = BackupTools.Endpoint(tool, c);
@@ -157,11 +186,11 @@ internal sealed class PostgresBackup(PostgresProvider provider) : IBackupStrateg
     }
 
     /// <summary>libpq reads the password and TLS mode from the environment (never argv).</summary>
-    private static Dictionary<string, string> Environment(SavedConnection c)
+    private static Dictionary<string, string> Environment(SavedConnection c, string appName)
     {
         var env = new Dictionary<string, string>
         {
-            ["PGAPPNAME"] = "Nexus",
+            ["PGAPPNAME"] = appName,
             ["PGCONNECT_TIMEOUT"] = "15",
             ["PGSSLMODE"] = c.SslMode.ToLowerInvariant() switch
             {
