@@ -31,35 +31,38 @@ internal sealed class MySqlBackup(MySqlProvider provider, bool preferMariaDbTool
     public string ReplaceHint =>
         "Drops and recreates the database before importing, so objects that aren't in the backup are removed too.";
 
-    public BackupReadiness Check(BackupDirection direction) =>
-        BackupTools.Check(direction == BackupDirection.Backup ? DumpTools : ClientTools, InstallHint);
+    public Task<BackupReadiness> CheckAsync(BackupDirection direction, SavedConnection connection,
+        CancellationToken ct = default) =>
+        BackupTools.CheckAsync(direction == BackupDirection.Backup ? DumpTools : ClientTools, InstallHint, connection, ct);
 
     public async Task BackupAsync(BackupTarget target, string path, BackupFormat format,
         IProgress<string> log, CancellationToken ct)
     {
-        var tool = await BackupTools.ResolveAsync(DumpTools, InstallHint, log, ct);
-        using var secret = OptionFile(target.Connection);
+        var tool = await BackupTools.ResolveAsync(DumpTools, InstallHint, target.Connection, log, ct);
+        await using var secret = await OptionFileAsync(tool, target.Connection, ct);
 
         var args = ConnectionArgs(tool, target.Connection, secret);
         args.AddRange([
             "--single-transaction", "--routines", "--triggers", "--events", "--hex-blob",
             // Tablespaces need the PROCESS privilege (MySQL 8.0.21+) and never matter for a logical restore.
-            "--no-tablespaces", "--default-character-set=utf8mb4", "--verbose", $"--result-file={path}"
+            "--no-tablespaces", "--default-character-set=utf8mb4", "--verbose"
         ]);
+        // In a container the dump streams over stdout (it can't see our file system).
+        if (!tool.InContainer) args.Add($"--result-file={path}");
         if (!IsMariaDb(tool) && tool.Version?.Major >= 8)
             // Oracle's 8.x client: skip histogram queries MariaDB/older servers lack, and GTID
             // statements that make the dump fail to load on another server.
             args.AddRange(["--column-statistics=0", "--set-gtid-purged=OFF"]);
         args.Add(target.Database);
 
-        await BackupTools.RunCheckedAsync(tool, args, log, ct);
+        await BackupTools.RunCheckedAsync(tool, args, log, ct, stdoutFile: tool.InContainer ? path : null);
     }
 
     public async Task RestoreAsync(BackupTarget target, string path, bool replace,
         IProgress<string> log, CancellationToken ct)
     {
         BackupRunner.EnsureNotGzip(path, "the mysql client");
-        var tool = await BackupTools.ResolveAsync(ClientTools, InstallHint, log, ct);
+        var tool = await BackupTools.ResolveAsync(ClientTools, InstallHint, target.Connection, log, ct);
 
         // Server-level statements from a connection without a default database: it may be the one being dropped.
         var admin = BackupTools.WithDatabase(target.Connection, "");
@@ -71,7 +74,7 @@ internal sealed class MySqlBackup(MySqlProvider provider, bool preferMariaDbTool
         }
         await BackupTools.ExecAsync(provider, admin, $"CREATE DATABASE IF NOT EXISTS {db}", ct);
 
-        using var secret = OptionFile(target.Connection);
+        await using var secret = await OptionFileAsync(tool, target.Connection, ct);
         var args = ConnectionArgs(tool, target.Connection, secret);
         // No --verbose: it echoes every statement of the script, row data included.
         args.AddRange(["--default-character-set=utf8mb4", $"--database={target.Database}"]);
@@ -93,20 +96,21 @@ internal sealed class MySqlBackup(MySqlProvider provider, bool preferMariaDbTool
         System.IO.Path.GetFileName(tool.Path).StartsWith("mariadb", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>[client] section with the password; must be the first option on the command line.</summary>
-    private static SecretFile OptionFile(SavedConnection c)
+    private static Task<ToolSecretFile> OptionFileAsync(ToolInfo tool, SavedConnection c, CancellationToken ct)
     {
         var password = ConnectionStore.GetPassword(c) ?? "";
         var escaped = password.Replace("\\", "\\\\").Replace("\"", "\\\"");
-        return SecretFile.Create($"[client]\npassword=\"{escaped}\"\n", ".cnf");
+        return BackupTools.SecretFileAsync(tool, $"[client]\npassword=\"{escaped}\"\n", ".cnf", ct);
     }
 
-    private static List<string> ConnectionArgs(ToolInfo tool, SavedConnection c, SecretFile secret)
+    private static List<string> ConnectionArgs(ToolInfo tool, SavedConnection c, ToolSecretFile secret)
     {
+        var (host, port) = BackupTools.Endpoint(tool, c);
         var args = new List<string>
         {
             $"--defaults-extra-file={secret.Path}",
             // "localhost" would otherwise mean the Unix socket, not the host/port of the profile.
-            "--protocol=TCP", $"--host={c.Host}", $"--port={c.Port}", $"--user={c.Username}"
+            "--protocol=TCP", $"--host={host}", $"--port={port}", $"--user={c.Username}"
         };
         var mode = c.SslMode.ToLowerInvariant();
         if (IsMariaDb(tool))

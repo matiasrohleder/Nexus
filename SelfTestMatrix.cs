@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Nexus.Models;
 using Nexus.Providers;
@@ -304,13 +305,13 @@ public static class SelfTestMatrix
             Console.WriteLine("   [SKIP] backup/restore: not offered for this engine");
             return;
         }
-        var ready = strategy.Check(BackupDirection.Backup);
+        var ready = await strategy.CheckAsync(BackupDirection.Backup, conn);
         if (!ready.Ready)
         {
             Console.WriteLine($"   [SKIP] backup/restore: {ready.Detail}");
             return;
         }
-        var canRestore = strategy.Check(BackupDirection.Restore).Ready;
+        var canRestore = (await strategy.CheckAsync(BackupDirection.Restore, conn)).Ready;
 
         var work = System.IO.Directory.CreateDirectory(
             System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"nexus-backup-test-{Guid.NewGuid():N}")).FullName;
@@ -409,7 +410,7 @@ public static class SelfTestMatrix
                 if (!canRestore)
                 {
                     var refused = await log.ThrowsAsync(() => BackupRunner.RestoreAsync(strategy, source, path, false, log, default));
-                    Check(refused, $"restore refused with an explanation ({strategy.Check(BackupDirection.Restore).Detail[..40]}…)");
+                    Check(refused, $"restore refused with an explanation ({(await strategy.CheckAsync(BackupDirection.Restore, conn)).Detail[..40]}…)");
                     continue;
                 }
 
@@ -428,6 +429,28 @@ public static class SelfTestMatrix
                 if (provider.Id is "sqlite" or "sqlserver")
                     Check(await log.ThrowsAsync(() => BackupRunner.RestoreAsync(strategy, restoreTarget, path, false, log, default)),
                           $"[{format.Id}] restore over existing data without replace is refused");
+
+                if (provider.Id == "postgresql")
+                {
+                    // ---- cancel mid-operation: the tool waits on a lock we hold, then we cancel ----
+                    var cancelledPath = System.IO.Path.Combine(work, $"cancelled-{format.Id}{format.Extension}");
+                    await CheckCancelAsync($"[{format.Id}] cancel backup", provider, conn, source.Database, table, log,
+                        ct => BackupRunner.BackupAsync(strategy, source, cancelledPath, format, log, ct),
+                        () =>
+                        {
+                            Check(!System.IO.File.Exists(cancelledPath) && !System.IO.File.Exists(cancelledPath + ".nexus-partial"),
+                                  $"[{format.Id}] cancelled backup left no file behind");
+                            return Task.CompletedTask;
+                        });
+                    await CheckCancelAsync($"[{format.Id}] cancel restore (replace)", provider, conn, restoreTarget.Database, table, log,
+                        ct => BackupRunner.RestoreAsync(strategy, restoreTarget, path, true, log, ct),
+                        async () =>
+                        {
+                            await Task.Delay(1000); // a surviving tool would carry on once the lock is gone
+                            var after = await count(restoreTarget);
+                            Check(after == expected, $"[{format.Id}] cancelled restore rolled back, data intact ({after}/{expected})");
+                        });
+                }
             }
         }
         catch (Exception ex)
@@ -442,6 +465,77 @@ public static class SelfTestMatrix
             await provider.DisconnectAsync(conn);
             try { System.IO.Directory.Delete(work, recursive: true); } catch { }
         }
+    }
+
+    /// <summary>
+    /// Starts <paramref name="run"/> while another session holds an exclusive lock on
+    /// <paramref name="table"/> in <paramref name="lockDb"/>, waits until the tool is blocked on
+    /// it (provably mid-operation), cancels, and checks that the tool's server session is gone
+    /// *before* releasing the lock — a tool left running (e.g. inside a container) would otherwise
+    /// carry on. <paramref name="verify"/> then runs with the lock released. PostgreSQL only.
+    /// </summary>
+    private static async Task CheckCancelAsync(string step, IDatabaseProvider provider, SavedConnection conn,
+        string lockDb, string table, TestLog log, Func<CancellationToken, Task> run, Func<Task> verify)
+    {
+        var admin = (SqlProviderBase)provider;
+        var blocker = await admin.OpenAsync(WithDb(conn, lockDb), default);
+        try
+        {
+            await using (var cmd = blocker.CreateCommand())
+            {
+                cmd.CommandText = $"BEGIN; LOCK TABLE {table} IN ACCESS EXCLUSIVE MODE";
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            using var cts = new CancellationTokenSource();
+            var task = Task.Run(() => run(cts.Token));
+            var blocked = await WaitUntilAsync(async () => await ToolSessionsAsync(provider, conn, waitingOnLock: true) > 0 || task.IsCompleted,
+                TimeSpan.FromSeconds(60)) && !task.IsCompleted;
+            Check(blocked, $"{step}: tool is mid-operation (blocked on our lock)");
+            if (!blocked) { log.DumpTail(); return; }
+
+            cts.Cancel();
+            var cancelled = false;
+            try { await task; }
+            catch (OperationCanceledException) { cancelled = true; }
+            catch (Exception ex) { Console.WriteLine($"         | unexpected: {ex.GetType().Name}: {ex.Message}"); }
+            Check(cancelled, $"{step}: reported as cancelled");
+
+            var gone = await WaitUntilAsync(async () => await ToolSessionsAsync(provider, conn, waitingOnLock: false) == 0,
+                TimeSpan.FromSeconds(15));
+            Check(gone, $"{step}: the tool was killed (its server session ended while the lock was still held)");
+        }
+        finally
+        {
+            try
+            {
+                await using var cmd = blocker.CreateCommand();
+                cmd.CommandText = "ROLLBACK";
+                await cmd.ExecuteNonQueryAsync();
+            }
+            catch { /* connection already gone */ }
+            await blocker.DisposeAsync();
+        }
+        await verify();
+    }
+
+    private static async Task<long> ToolSessionsAsync(IDatabaseProvider provider, SavedConnection conn, bool waitingOnLock)
+    {
+        var sql = $"SELECT COUNT(*) FROM pg_stat_activity WHERE application_name LIKE '{Nexus.Providers.Backup.PostgresBackup.AppName} %'" +
+                  (waitingOnLock ? " AND wait_event_type = 'Lock'" : "");
+        var r = await provider.ExecuteAsync(conn, sql);
+        return r[0].HasError || r[0].Rows.Count == 0 ? -1 : long.Parse(r[0].Rows[0][0]!);
+    }
+
+    private static async Task<bool> WaitUntilAsync(Func<Task<bool>> condition, TimeSpan timeout)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        while (sw.Elapsed < timeout)
+        {
+            if (await condition()) return true;
+            await Task.Delay(200);
+        }
+        return await condition();
     }
 
     private static SavedConnection WithDb(SavedConnection c, string database)

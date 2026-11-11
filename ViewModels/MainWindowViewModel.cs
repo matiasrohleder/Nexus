@@ -719,6 +719,24 @@ public partial class MainWindowViewModel : ViewModelBase
         SelectedDocument = doc;
     }
 
+    /// <summary>
+    /// Opens a cell value in a "Value" tab next to the current one, or switches to the tab already
+    /// showing that cell (same row object + column).
+    /// </summary>
+    public void OpenValueViewer(ValueViewerViewModel viewer)
+    {
+        var existing = Documents.OfType<ValueViewerViewModel>().FirstOrDefault(d => Equals(d.SourceKey, viewer.SourceKey));
+        if (existing is not null)
+        {
+            SelectedDocument = existing;
+            return;
+        }
+        var index = SelectedDocument is null ? -1 : Documents.IndexOf(SelectedDocument);
+        if (index >= 0) Documents.Insert(index + 1, viewer);
+        else Documents.Add(viewer);
+        SelectedDocument = viewer;
+    }
+
     [RelayCommand]
     private void RunActive() => (SelectedDocument as QueryDocumentViewModel)?.RunCommand.Execute(null);
 

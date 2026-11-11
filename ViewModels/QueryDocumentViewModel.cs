@@ -350,6 +350,10 @@ public partial class QueryDocumentViewModel : DocumentViewModel
         var path = await PickSavePath("results.json");
         if (path is null) return;
 
+        // json/jsonb/JSON columns are embedded as JSON, not as an escaped string.
+        var jsonColumns = Enumerable.Range(0, rs.Columns.Count)
+            .Select(i => Services.ValueFormats.FromTypeName(rs.ColumnType(i)) == Services.ValueKind.Json).ToArray();
+
         var list = new List<Dictionary<string, object?>>();
         foreach (var row in rs.Rows)
         {
@@ -360,6 +364,7 @@ public partial class QueryDocumentViewModel : DocumentViewModel
                 obj[rs.Columns[i]] = raw switch
                 {
                     null or DBNull => null,
+                    string s when jsonColumns[i] && TryParseJson(s) is { } node => node,
                     bool or string or int or long or double or decimal or float or short or byte => raw,
                     _ => EditableRow.ToCellText(raw)
                 };
@@ -370,5 +375,11 @@ public partial class QueryDocumentViewModel : DocumentViewModel
             new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
         await System.IO.File.WriteAllTextAsync(path, json);
         StatusText = $"Exported {rs.Rows.Count} row(s) to {System.IO.Path.GetFileName(path)}";
+    }
+
+    private static System.Text.Json.Nodes.JsonNode? TryParseJson(string text)
+    {
+        try { return System.Text.Json.Nodes.JsonNode.Parse(text); }
+        catch (System.Text.Json.JsonException) { return null; }
     }
 }

@@ -55,6 +55,7 @@ public partial class QueryDocumentView : UserControl
         ResultsGrid.AddHandler(PointerWheelChangedEvent, (_, e) => OnZoomWheel(e, UiFonts.ChangeGrid),
             Avalonia.Interactivity.RoutingStrategies.Tunnel);
         ResultsGrid.LoadingRow += (_, e) => e.Row.Header = (e.Row.Index + 1).ToString("N0");
+        GridCellActions.Attach(ResultsGrid, OpenValue, openOnDoubleClick: true);
         CopyErrorButton.Click += OnCopyError;
         DataContextChanged += OnDataContextChanged;
         AttachedToVisualTree += (_, _) => SchemaCache.Changed += OnSchemaChanged;
@@ -392,24 +393,24 @@ public partial class QueryDocumentView : UserControl
     /// <summary>Rebuilds the results DataGrid columns from the runtime schema of the result set.</summary>
     private void RebuildColumns(QueryResult? result)
     {
-        ResultsGrid.Columns.Clear();
-        ResultsGrid.ItemsSource = null;
-
         if (result is null || !result.HasResultSet)
-            return;
-
-        for (int i = 0; i < result.Columns.Count; i++)
         {
-            ResultsGrid.Columns.Add(new DataGridTextColumn
-            {
-                Header = result.Columns[i],
-                // Reflection binding to ResultRow's string indexer (schema known only at runtime).
-                Binding = new Binding($"[{i}]"),
-                Width = new DataGridLength(1, DataGridLengthUnitType.Auto)
-            });
+            ResultsGrid.Columns.Clear();
+            ResultsGrid.ItemsSource = null;
+            return;
         }
+        GridColumns.Build(ResultsGrid, result.Columns, result.ColumnType, result.Rows, editable: false, OpenValue);
+    }
 
-        ResultsGrid.ItemsSource = result.Rows;
-        GridColumns.FillLastColumn(ResultsGrid);
+    /// <summary>Opens a result cell in a read-only value tab (formatted when it's JSON/XML).</summary>
+    private void OpenValue(ICellSource row, ValueColumn column)
+    {
+        if (_vm?.SelectedResult is not { } result || row.GetText(column.Ordinal) is not { } text) return;
+        if (TopLevel.GetTopLevel(this)?.DataContext is not MainWindowViewModel main) return;
+
+        var rowNumber = row is ResultRow r ? result.Rows.IndexOf(r) + 1 : 0;
+        var header = column.Header?.ToString() ?? "value";
+        main.OpenValueViewer(new ValueViewerViewModel($"{header} · row {rowNumber:N0}", header,
+            result.ColumnType(column.Ordinal), text, column.Kind, (row, column.Ordinal)));
     }
 }

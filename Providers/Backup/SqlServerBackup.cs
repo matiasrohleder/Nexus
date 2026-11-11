@@ -22,8 +22,8 @@ internal sealed class SqlServerBackup(SqlServerProvider provider) : IBackupStrat
     public string ReplaceHint =>
         "Overwrites the existing database (RESTORE … WITH REPLACE), disconnecting everyone using it.";
 
-    public BackupReadiness Check(BackupDirection direction) =>
-        BackupReadiness.Ok("Runs on the server with BACKUP/RESTORE DATABASE — the path is on the server's file system.");
+    public Task<BackupReadiness> CheckAsync(BackupDirection direction, SavedConnection connection,
+        CancellationToken ct = default) => Task.FromResult(BackupReadiness.Ok("Runs on the server with BACKUP/RESTORE DATABASE — the path is on the server's file system."));
 
     public async Task<string?> SuggestServerPathAsync(BackupTarget target, string fileName, CancellationToken ct)
     {

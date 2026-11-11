@@ -120,7 +120,13 @@ driver. Key ideas that span multiple files:
   DuckDB EXPORT/IMPORT, SQL Server BACKUP/RESTORE — `ServerFile` paths live on the server); the
   vendor's CLI otherwise, found by `Services/ExternalTools` (user-located `AppSettings.ToolPaths`,
   PATH, then vendor install dirs — GUI launches don't inherit the shell PATH). **Never bundle or
-  download those tools** (that would be an extension). Secrets go via env (`PGPASSWORD`,
+  download those tools** (that would be an extension). If none is installed (or the container's
+  has a newer major), `Services/ContainerTools` runs the copy **inside the Docker/Podman container
+  that publishes the connection's port** (local hosts only; `docker exec`, tool connects to
+  127.0.0.1:<container port>). The container can't see host paths, so strategies stream files via
+  stdin/stdout when `ToolInfo.InContainer` (`RunCheckedAsync` `stdinFile`/`stdoutFile`), env
+  secrets are forwarded with `-e NAME`, and secret files go through `BackupTools.SecretFileAsync`
+  (created inside the container, removed after). Readiness is `IBackupStrategy.CheckAsync`. Secrets go via env (`PGPASSWORD`,
   `REDISCLI_AUTH`) or an owner-only `SecretFile` (`--defaults-extra-file`, mongodump `--config`),
   never argv — `RunAsync` echoes the command line into the log. Always go through `BackupRunner`:
   it writes to `<path>.nexus-partial` and moves into place only on success. pg_dump must be ≥ the
@@ -174,6 +180,16 @@ driver. Key ideas that span multiple files:
   needed: odd chars, reserved words, or case the engine would fold — `UnquotedCase`).
   `SchemaCache.Changed` redraws editors; after `Invalidate` views use `TryGet` (an eager `Get`
   would reconnect a connection the user just disconnected).
+- **Result/data grids** (`Views/GridColumns` + `ValueColumn` + `GridCellActions`): both grids
+  build `ValueColumn`s via `GridColumns.Build` over rows implementing `ICellSource` (`ResultRow`,
+  `EditableRow`). Widths are **computed** (header + first 500 rows in the mono font, capped at
+  48 chars; cells are one line — `ValueFormats.ToDisplay` turns line breaks into "↵", caps at
+  1000 chars, and the cell trims with "…"); the user's dragged widths survive font zoom. Header
+  right-click: Fit to content / Reset width; cell right-click: open value / copy. JSON/XML
+  columns (engine type via `QueryResult.ColumnTypes` ← `GetDataTypeName`, else content sniffing
+  of every sampled value) get a `{}` cell button that opens a `ValueViewerViewModel` tab
+  (formatted, highlighted by `ValueColorizer`, folding); results also open on double-click. From
+  the data editor the viewer can "Apply to cell" (validated, then pending until Commit).
 - **Generated SELECTs** (`SqlProviderBase.FormatSelect`): `SELECT` alone, one column per line
   indented 4 spaces, `FROM`, then the dialect limit (`SELECT TOP (n)` on SQL Server).
 - **Explorer folders/order**: order = order of `Connections` (connections.json);
@@ -203,6 +219,11 @@ driver. Key ideas that span multiple files:
   wide children overflow. Use a `Margin` on the content instead.
 - A transparent `Background` still hit-tests: an empty control layered over another (e.g. the
   TreeView over the first-run hint) swallows its clicks — hide it instead.
+- **Never give a DataGrid a star column when the columns don't fit**: it then squeezes every
+  other column down to `MinWidth` (20px) to make the star fit — that, not `Auto`, made result
+  columns unreadable. `GridColumns.UpdateFill` makes the last column star only while everything
+  fits (re-checked on grid resize and column drags). `Auto` widths are also unreliable: columns
+  off screen during the first layout never get measured.
 - Results/data grids build `DataGridTextColumn`s in code-behind with reflection bindings to a
   string indexer (`Binding("[i]")`) because the schema is only known at runtime.
 - Package name quirk: the editor package is `Avalonia.AvaloniaEdit` (theme at
@@ -228,7 +249,7 @@ and inject into the VM.
 ## Versioning
 
 Semantic versioning starting at **0.1.0** (0.2.0 = OS keyring + installers; 0.3.0 = connect/disconnect + explorer fixes; 0.4.0 = SQL
-completion/highlighting, responsive grids, self-update; 0.5.0 = backup/restore). The single source of truth is `<Version>` in
+completion/highlighting, responsive grids, self-update; 0.5.0 = backup/restore; 0.5.1 = readable result grids + JSON/XML value viewer). The single source of truth is `<Version>` in
 `Nexus.csproj`; `Services/AppInfo.cs` reads it from the assembly at runtime and the top bar
 renders it as "Nexus — {version}" (`MainWindowViewModel.VersionText`); the packaging scripts
 read it from the csproj too. To release: bump `<Version>`, commit, push tag `v<Version>`.
@@ -247,6 +268,8 @@ Don't hardcode the version anywhere else.
   **explicit, line-broken column list** (one column per line, dialect LIMIT/TOP/FETCH), falling
   back to `*` only if introspection fails.
 - Result/data grids show **row numbers** and the results toolbar a row count.
+- Grid cells are **one line** with a capped automatic width ("…" when longer; drag or "Fit to
+  content" to see more); full values open in a value tab, JSON/XML pretty-printed.
 - Query errors must be loud: red selectable banner above results + Messages tab + status.
 - Run = F5 **and** Ctrl+Enter. Selection-aware (runs highlighted text if any).
 - Updates: checked on startup (opt-out checkbox in the dialog, `AppSettings.CheckForUpdatesOnStartup`),

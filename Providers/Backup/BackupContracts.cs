@@ -53,6 +53,7 @@ public sealed record BackupReadiness(bool Ready, string Detail, string? Tool = n
     public static BackupReadiness Missing(string tool, string installHint) =>
         new(false, $"'{tool}' was not found. {installHint}", tool);
     public static BackupReadiness Unsupported(string reason) => new(false, reason);
+    public static readonly BackupReadiness Checking = new(false, "Looking for the tools this needs…");
 }
 
 /// <summary>A backup/restore failure with a message meant for the user (the log has the details).</summary>
@@ -77,8 +78,11 @@ public interface IBackupStrategy
     /// <summary>What "Replace existing data" does on this engine (shown under the checkbox).</summary>
     string ReplaceHint { get; }
 
-    /// <summary>Checks that the tools for a direction are available (file-system lookups only, no connection).</summary>
-    BackupReadiness Check(BackupDirection direction);
+    /// <summary>
+    /// Checks that the tools for a direction are available — installed on this machine, or inside
+    /// the container that runs <paramref name="connection"/>'s server. Doesn't connect to the database.
+    /// </summary>
+    Task<BackupReadiness> CheckAsync(BackupDirection direction, SavedConnection connection, CancellationToken ct = default);
 
     /// <summary>Default backup path for <see cref="BackupLocation.ServerFile"/> engines (asks the server); null otherwise.</summary>
     Task<string?> SuggestServerPathAsync(BackupTarget target, string fileName, CancellationToken ct) =>

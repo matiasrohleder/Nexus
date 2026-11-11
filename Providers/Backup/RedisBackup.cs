@@ -29,24 +29,27 @@ internal sealed class RedisBackup : IBackupStrategy
 
     public string ReplaceHint => "";
 
-    public BackupReadiness Check(BackupDirection direction) => direction == BackupDirection.Backup
-        ? BackupTools.Check(["redis-cli"], InstallHint)
-        : BackupReadiness.Unsupported(RestoreUnsupported);
+    public Task<BackupReadiness> CheckAsync(BackupDirection direction, SavedConnection connection,
+        CancellationToken ct = default) => direction == BackupDirection.Backup
+        ? BackupTools.CheckAsync(["redis-cli"], InstallHint, connection, ct)
+        : Task.FromResult(BackupReadiness.Unsupported(RestoreUnsupported));
 
     public async Task BackupAsync(BackupTarget target, string path, BackupFormat format,
         IProgress<string> log, CancellationToken ct)
     {
-        var tool = await BackupTools.ResolveAsync(["redis-cli"], InstallHint, log, ct);
         var c = target.Connection;
-        var args = new List<string> { "-h", c.Host, "-p", c.Port.ToString() };
+        var tool = await BackupTools.ResolveAsync(["redis-cli"], InstallHint, c, log, ct);
+        var (host, port) = BackupTools.Endpoint(tool, c);
+        var args = new List<string> { "-h", host, "-p", port.ToString() };
         if (!string.IsNullOrEmpty(c.Username)) args.AddRange(["--user", c.Username]);
-        args.AddRange(["--rdb", path]);
+        // "-" = stdout (redis-cli 6.2+), how the snapshot leaves a container.
+        args.AddRange(["--rdb", tool.InContainer ? "-" : path]);
 
         var env = new Dictionary<string, string>();
         var password = ConnectionStore.GetPassword(c);
         if (!string.IsNullOrEmpty(password)) env["REDISCLI_AUTH"] = password;
 
-        await BackupTools.RunCheckedAsync(tool, args, log, ct, env);
+        await BackupTools.RunCheckedAsync(tool, args, log, ct, env, stdoutFile: tool.InContainer ? path : null);
     }
 
     public Task RestoreAsync(BackupTarget target, string path, bool replace,
