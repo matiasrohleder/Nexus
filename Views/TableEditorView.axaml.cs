@@ -1,6 +1,6 @@
 using System;
 using Avalonia.Controls;
-using Avalonia.Data;
+using Nexus.Models;
 using Nexus.ViewModels;
 
 namespace Nexus.Views;
@@ -15,6 +15,8 @@ public partial class TableEditorView : UserControl
         DataContextChanged += OnDataContextChanged;
         EditGrid.CellEditEnded += (_, _) => _vm?.UpdatePendingStatus();
         EditGrid.LoadingRow += (_, e) => e.Row.Header = (e.Row.Index + 1).ToString("N0");
+        // Double-click edits here, so values open from the cell button or the right-click menu.
+        GridCellActions.Attach(EditGrid, OpenValue, openOnDoubleClick: false);
         // Ctrl+wheel zooms the grid font (shared with the query results grids).
         EditGrid.AddHandler(PointerWheelChangedEvent, (_, e) =>
         {
@@ -41,22 +43,29 @@ public partial class TableEditorView : UserControl
     private void RebuildColumns()
     {
         if (_vm is null) return;
+        var vm = _vm;
+        GridColumns.Build(EditGrid, vm.ColumnNames, vm.ColumnType, vm.Rows, editable: true, OpenValue);
+    }
 
-        EditGrid.Columns.Clear();
-        EditGrid.ItemsSource = null;
+    /// <summary>
+    /// Opens a cell in a value tab. On an editable table the tab can write the value back into the
+    /// cell (pending until Commit, like a grid edit).
+    /// </summary>
+    private void OpenValue(ICellSource source, ValueColumn column)
+    {
+        if (_vm is not { } vm || source is not EditableRow row || row.GetCurrent(column.Ordinal) is not { } text) return;
+        if (TopLevel.GetTopLevel(this)?.DataContext is not MainWindowViewModel main) return;
 
-        for (int i = 0; i < _vm.ColumnNames.Count; i++)
+        Func<string, string?>? apply = vm.IsReadOnly ? null : value =>
         {
-            EditGrid.Columns.Add(new DataGridTextColumn
-            {
-                Header = _vm.ColumnNames[i],
-                // Two-way reflection binding to EditableRow's string indexer.
-                Binding = new Binding($"[{i}]") { Mode = BindingMode.TwoWay },
-                Width = new DataGridLength(1, DataGridLengthUnitType.Auto)
-            });
-        }
-
-        EditGrid.ItemsSource = _vm.Rows;
-        GridColumns.FillLastColumn(EditGrid);
+            if (!vm.Rows.Contains(row))
+                return "That row is no longer in the data editor (it was refreshed or deleted).";
+            row[column.Ordinal] = value;
+            vm.UpdatePendingStatus();
+            return null;
+        };
+        var header = column.Header?.ToString() ?? "value";
+        main.OpenValueViewer(new ValueViewerViewModel($"{header} · row {vm.Rows.IndexOf(row) + 1:N0}", header,
+            vm.ColumnType(column.Ordinal), text, column.Kind, (row, column.Ordinal), apply));
     }
 }

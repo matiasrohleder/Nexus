@@ -1,0 +1,68 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Nexus.ViewModels"
+             xmlns:ae="using:AvaloniaEdit"
+             xmlns:c="using:Nexus.Controls"
+             x:Class="Nexus.Views.ValueViewerView"
+             x:DataType="vm:ValueViewerViewModel">
+
+    <Grid RowDefinitions="Auto,*,Auto">
+        <!-- Toolbar -->
+        <Border Grid.Row="0" Background="#252526" Padding="8 6" BorderBrush="#3F3F46" BorderThickness="0 0 0 1">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6">
+                    <TextBlock Text="View as" VerticalAlignment="Center" Opacity="0.6" FontSize="12" />
+                    <ComboBox MinWidth="90" ItemsSource="{Binding KindLabels}" SelectedIndex="{Binding KindIndex}" />
+                    <Button Classes="toolbar" Command="{Binding FormatCommand}" IsVisible="{Binding IsStructured}"
+                            ToolTip.Tip="Pretty-print with indentation">
+                        <StackPanel Orientation="Horizontal" Spacing="6"><c:Icon Kind="indent" Size="14" /><TextBlock Text="Format" /></StackPanel>
+                    </Button>
+                    <Button Classes="toolbar" Command="{Binding CompactCommand}" IsVisible="{Binding IsStructured}"
+                            ToolTip.Tip="Remove all formatting whitespace (one line)">
+                        <StackPanel Orientation="Horizontal" Spacing="6"><c:Icon Kind="compact" Size="14" /><TextBlock Text="Compact" /></StackPanel>
+                    </Button>
+                    <ToggleButton Classes="toolbar" IsChecked="{Binding WordWrap}" ToolTip.Tip="Wrap long lines">
+                        <StackPanel Orientation="Horizontal" Spacing="6"><c:Icon Kind="wrap" Size="14" /><TextBlock Text="Wrap" /></StackPanel>
+                    </ToggleButton>
+                    <Button Classes="toolbar" Command="{Binding CopyCommand}" ToolTip.Tip="Copy the whole value">
+                        <StackPanel Orientation="Horizontal" Spacing="6"><c:Icon Kind="copy" Size="14" /><TextBlock Text="Copy" /></StackPanel>
+                    </Button>
+                    <Border Width="1" Height="20" Background="#3F3F46" VerticalAlignment="Center" Margin="4 0"
+                            IsVisible="{Binding CanApply}" />
+                    <Button Classes="toolbar" Command="{Binding RevertCommand}" IsVisible="{Binding CanApply}"
+                            ToolTip.Tip="Back to the value the cell had when this tab opened">
+                        <StackPanel Orientation="Horizontal" Spacing="6"><c:Icon Kind="undo" Size="14" /><TextBlock Text="Revert" /></StackPanel>
+                    </Button>
+                    <Button Classes="toolbar accent" Command="{Binding ApplyCommand}" IsVisible="{Binding CanApply}"
+                            ToolTip.Tip="Write this text into the cell (then Commit in the data editor)">
+                        <StackPanel Orientation="Horizontal" Spacing="6"><c:Icon Kind="check" Size="14" /><TextBlock Text="Apply to cell" /></StackPanel>
+                    </Button>
+                </StackPanel>
+                <TextBlock Grid.Column="2" Text="{Binding Header}" VerticalAlignment="Center" Margin="12 0 4 0"
+                           FontSize="12" Opacity="0.7" TextTrimming="CharacterEllipsis" />
+            </Grid>
+        </Border>
+
+        <ae:TextEditor Grid.Row="1" Name="Editor"
+                       ShowLineNumbers="True"
+                       FontFamily="{StaticResource MonoFont}"
+                       FontSize="{DynamicResource EditorFontSize}"
+                       Background="#1E1E1E"
+                       Foreground="#D4D4D4"
+                       HorizontalScrollBarVisibility="Auto"
+                       VerticalScrollBarVisibility="Auto" />
+
+        <!-- Status: size + validity (red when the text doesn't parse) -->
+        <Border Grid.Row="2" Background="#252526" Padding="10 5" BorderBrush="#3F3F46" BorderThickness="0 1 0 0">
+            <SelectableTextBlock Text="{Binding StatusText}" FontSize="12" TextWrapping="Wrap" MaxHeight="60"
+                                 Classes.error="{Binding HasError}" Opacity="0.85">
+                <SelectableTextBlock.Styles>
+                    <Style Selector="SelectableTextBlock.error">
+                        <Setter Property="Foreground" Value="#F48771" />
+                        <Setter Property="Opacity" Value="1" />
+                    </Style>
+                </SelectableTextBlock.Styles>
+            </SelectableTextBlock>
+        </Border>
+    </Grid>
+</UserControl>

@@ -137,6 +137,38 @@
             <Setter Property="MinWidth" Value="36" />
         </Style>
 
+        <!-- "Open value" button inside JSON/XML cells of the result/data grids -->
+        <Style Selector="Button.cell-open">
+            <Setter Property="Padding" Value="3" />
+            <Setter Property="Margin" Value="0 0 4 0" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="3" />
+            <Setter Property="Foreground" Value="#C586C0" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.cell-open:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#3A3A3E" />
+        </Style>
+
+        <!-- Toggle buttons styled like toolbar buttons (value viewer "Wrap") -->
+        <Style Selector="ToggleButton.toolbar">
+            <Setter Property="Padding" Value="10 5" />
+            <Setter Property="MinHeight" Value="30" />
+            <Setter Property="Background" Value="#2D2D30" />
+            <Setter Property="BorderBrush" Value="#3F3F46" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <Style Selector="ToggleButton.toolbar:checked /template/ ContentPresenter">
+            <Setter Property="Background" Value="#1E3A5F" />
+            <Setter Property="BorderBrush" Value="#3B82F6" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+
         <!-- Splitters: thin line, accent on hover so they're easy to find and grab -->
         <Style Selector="GridSplitter">
             <Setter Property="Background" Value="#2B2B2F" />

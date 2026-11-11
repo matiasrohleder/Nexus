@@ -274,6 +274,9 @@ public sealed partial class MongoProvider : IDatabaseProvider
         return parts;
     }
 
+    private static readonly MongoDB.Bson.IO.JsonWriterSettings RelaxedJson =
+        new() { OutputMode = MongoDB.Bson.IO.JsonOutputMode.RelaxedExtendedJson };
+
     /// <summary>Documents → grid: union of top-level keys become columns; nested values as JSON.</summary>
     private static void FillFromDocuments(QueryResult result, List<BsonDocument> docs)
     {
@@ -302,7 +305,8 @@ public sealed partial class MongoProvider : IDatabaseProvider
                     BsonBoolean b => b.Value,
                     BsonDateTime d => d.ToUniversalTime(),
                     BsonObjectId o => o.Value.ToString(),
-                    _ => v.ToJson()
+                    // Relaxed extended JSON is valid JSON ({"$oid": …}), so the grid can offer the JSON viewer.
+                    _ => v.ToJson(RelaxedJson)
                 };
             }
             result.Rows.Add(new ResultRow(values));

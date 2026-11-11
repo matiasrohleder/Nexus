@@ -99,5 +99,11 @@ public sealed class Icon : Control
         ["arrow-down"] = "M12 5v14 M6 13l6 6l6-6",
         ["text-size"] = "M4 18L9 6l5 12 M5.7 14h6.6 M15 18l3-7l3 7 M15.9 16h4.2",
         ["info"] = "M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0 M12 11v5 M12 8h.01",
+        ["braces"] = "M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2a2 2 0 0 1 2 2v5a2 2 0 0 0 2 2h1 M16 21h1a2 2 0 0 0 2-2v-5a2 2 0 0 1 2-2a2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1",
+        ["copy"] = "M8 8h12v12H8Z M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2",
+        ["fit-width"] = "M2 12h20 M6 8l-4 4l4 4 M18 8l4 4l-4 4",
+        ["wrap"] = "M3 6h18 M3 12h15a3 3 0 1 1 0 6h-4 M16 16l-2 2l2 2 M3 18h7",
+        ["indent"] = "M3 6h18 M11 12h10 M11 18h10 M3 10l4 3l-4 3",
+        ["compact"] = "M4 14h6v6 M20 10h-6V4 M14 10l7-7 M3 21l7-7",
     };
 }

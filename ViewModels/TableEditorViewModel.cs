@@ -12,9 +12,9 @@ using Nexus.Providers;
 namespace Nexus.ViewModels;
 
 /// <summary>A grid row being edited. Cell text of "(null)" means SQL NULL (same convention as the viewer).</summary>
-public sealed partial class EditableRow : ObservableObject
+public sealed partial class EditableRow : ObservableObject, ICellSource
 {
-    public const string NullText = "(null)";
+    public const string NullText = CellText.NullText;
 
     /// <summary>Original raw values from the database; null for brand-new rows.</summary>
     public object?[]? Original { get; }
@@ -44,6 +44,8 @@ public sealed partial class EditableRow : ObservableObject
     /// <summary>Edited value: null = SQL NULL.</summary>
     public string? GetCurrent(int index) => _current[index];
 
+    string? ICellSource.GetText(int index) => _current[index];
+
     public bool IsCellDirty(int index) =>
         Original is not null && _current[index] != ToCellText(Original[index]);
 
@@ -60,6 +62,8 @@ public sealed partial class EditableRow : ObservableObject
         null or DBNull => null,
         bool b => b ? "true" : "false",
         byte[] bytes => "0x" + Convert.ToHexString(bytes),
+        string s => s,
+        System.Collections.IEnumerable list => CellText.FormatList(list, ToCellText),
         IFormattable f => f.ToString(null, CultureInfo.InvariantCulture),
         _ => value.ToString()
     };
@@ -88,6 +92,10 @@ public partial class TableEditorViewModel : DocumentViewModel
     [ObservableProperty] private bool _isReadOnly = true;
     [ObservableProperty] private bool _isBusy;
     [ObservableProperty] private string _statusText = "Loading…";
+
+    /// <summary>Engine type of the i-th grid column (from introspection); null if unknown.</summary>
+    public string? ColumnType(int index) =>
+        index < ColumnNames.Count ? _columns.FirstOrDefault(c => c.Name == ColumnNames[index])?.DataType : null;
 
     /// <summary>Raised after (re)load so the view can rebuild grid columns.</summary>
     public event EventHandler? SchemaLoaded;

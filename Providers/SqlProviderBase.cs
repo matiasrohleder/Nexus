@@ -175,7 +175,10 @@ public abstract class SqlProviderBase : IDatabaseProvider
                 {
                     var qr = new QueryResult();
                     for (int i = 0; i < reader.FieldCount; i++)
+                    {
                         qr.Columns.Add(reader.GetName(i));
+                        qr.ColumnTypes.Add(TypeNameOf(reader, i));
+                    }
 
                     bool truncated = false;
                     while (await reader.ReadAsync(ct))
@@ -346,6 +349,13 @@ public abstract class SqlProviderBase : IDatabaseProvider
     /// catalogs, and quote-doubling makes them safe to embed.
     /// </summary>
     protected static string Lit(string s) => "'" + s.Replace("'", "''") + "'";
+
+    /// <summary>Engine type name of a result column (json, jsonb, xml…); null if the driver can't say.</summary>
+    private static string? TypeNameOf(DbDataReader r, int i)
+    {
+        try { return r.GetDataTypeName(i); }
+        catch { return null; }
+    }
 
     protected static string? GetStringOrNull(DbDataReader r, int i) => r.IsDBNull(i) ? null : r.GetValue(i).ToString();
     protected static double? GetDoubleOrNull(DbDataReader r, int i) => r.IsDBNull(i) ? null : Convert.ToDouble(r.GetValue(i));
