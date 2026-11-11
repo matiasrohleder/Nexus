@@ -249,7 +249,7 @@ and inject into the VM.
 ## Versioning
 
 Semantic versioning starting at **0.1.0** (0.2.0 = OS keyring + installers; 0.3.0 = connect/disconnect + explorer fixes; 0.4.0 = SQL
-completion/highlighting, responsive grids, self-update; 0.5.0 = backup/restore). The single source of truth is `<Version>` in
+completion/highlighting, responsive grids, self-update; 0.5.0 = backup/restore; 0.5.1 = readable result grids + JSON/XML value viewer). The single source of truth is `<Version>` in
 `Nexus.csproj`; `Services/AppInfo.cs` reads it from the assembly at runtime and the top bar
 renders it as "Nexus — {version}" (`MainWindowViewModel.VersionText`); the packaging scripts
 read it from the csproj too. To release: bump `<Version>`, commit, push tag `v<Version>`.
